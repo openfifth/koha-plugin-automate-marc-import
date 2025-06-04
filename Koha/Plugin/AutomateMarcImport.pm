@@ -5,6 +5,7 @@ use Modern::Perl;
 use base qw(Koha::Plugins::Base);
 use Koha::File::Transports;
 use C4::Context;
+use Koha::Logger;
 
 our $VERSION = "0.0.1";
 
@@ -27,6 +28,7 @@ sub new {
 
     my $self = $class->SUPER::new($args);
     $self->{cgi} = CGI->new();
+    $self->{logger} = Koha::Logger->get;
     $self->_set_plugin_dir();
 
     return $self;
@@ -52,6 +54,20 @@ sub configure {
     );
 
     $self->output_html( $template->output() );
+}
+
+sub cronjob_nightly {
+    my ( $self ) = @_;
+    foreach my $transportId (split(',', $self->retrieve_data('selected_transport_servers'))) {
+        my $transport = Koha::File::Transports->find($transportId);
+        if (!defined $transport->download_directory) {
+            $self->{logger}->error($transport->name . " does not have a download directory set and therefore could not be used.");
+            next;
+        }
+        $transport->connect();
+        $transport->change_directory($transport->download_directory);
+        my $file_list = $transport->list_files();
+    }
 }
 
 
