@@ -1,0 +1,70 @@
+[% USE raw %]
+[% USE Asset %]
+[% PROCESS 'i18n.inc' %]
+[% SET footerjs = 1 %]
+[% INCLUDE 'doc-head-open.inc' %]
+<title>[% FILTER collapse %]
+    [% t("AutomateMarcImport") | html %] &rsaquo;
+    [% t("Plugins") | html %] &rsaquo;
+    [% t("Koha") | html %]
+[% END %]</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body id="plugins_AutomateMarcImport" class="plugins">
+[% WRAPPER 'header.inc' %]
+    [% INCLUDE 'cat-search.inc' %]
+[% END %]
+
+[% WRAPPER 'sub-header.inc' %]
+    [% WRAPPER breadcrumbs %]
+        [% WRAPPER breadcrumb_item %]
+            <a href="/cgi-bin/koha/plugins/plugins-home.pl?method=report">Plugins</a>
+        [% END %]
+        [% WRAPPER breadcrumb_item %]
+            <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS | uri %]&method=report">Automate Marc Import</a>
+        [% END %]
+        [% WRAPPER breadcrumb_item bc_active= 1 %]
+            <span>Configuration</span>
+        [% END %]
+    [% END #/ WRAPPER breadcrumbs %]
+[% END #/ WRAPPER sub-header.inc %]
+
+<div id="main container-fluid">
+    <div class="row">
+        <div class="col-md-10 order-md-2 order-sm-1">
+            <main>
+                <h1>Automate MARC Import and Staging - Configuration</h1>
+                <form method="get">
+                    <input type="hidden" name="class" value="[% CLASS %]"/>
+                    <input type="hidden" name="method" value="[% METHOD %]"/>
+                    <fieldset class="rows">
+                        <legend>(S)FTP servers to import MARC files from</legend>
+                        [% IF available_transport_servers.count %]
+                        <ol>
+                            [% FOREACH server IN available_transport_servers %]
+                            <li><input type="checkbox" name="transport_servers" value="[% server.id %]" [% IF selected_transport_servers.search(server.id) %]checked[% END %]><label>[% server.name %]</label></li>
+                            [% END %]
+                        </ol>
+                        [% END %]     
+                        <div class="alert alert-info">
+                            [% IF available_transport_servers.count %]
+                            Cannot find the SFTP server you are looking for? Consider <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">adding</a> one.
+                            [% ELSE %]
+                            No EDI vendors SFTP servers found, would you like to <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">add</a> one?
+                            [% END %]
+                        </div>
+                    </fieldset>
+                    <fieldset class="action">
+                        <input type="hidden" name="save" value="1" />
+                        <input type="submit" class="btn btn-primary" value="Save configuration" />
+                        <a class="cancel" href="/cgi-bin/koha/plugins/plugins-home.pl?method=report">Cancel</a>
+					</fieldset>
+                </form>
+            </main>
+        </div>
+        <div class="col-md-2 order-sm-2 order-md-1">
+            <aside></aside>
+        </div>
+    </div>
+
+[% INCLUDE 'intranet-bottom.inc' %]

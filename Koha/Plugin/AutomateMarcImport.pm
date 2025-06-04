@@ -3,8 +3,10 @@ package Koha::Plugin::AutomateMarcImport;
 use Modern::Perl;
 
 use base qw(Koha::Plugins::Base);
+use Koha::File::Transports;
+use C4::Context;
 
-our $VERSION = "0.0";
+our $VERSION = "0.0.1";
 
 our $metadata = {
     name            => 'Automate Marc Import',
@@ -29,6 +31,26 @@ sub new {
     return $self;
 }
 
-# Your plugin code here
+sub configure {
+    my ( $self, $args  ) = @_;
+    my $cgi = $self->{'cgi'};
+
+    if ( $cgi->param('save') ) {
+        my $selected_transport_servers = join(',', sort {$a <=> $b } $cgi->multi_param('transport_servers'));
+        $self->store_data( { selected_transport_servers => $selected_transport_servers } );
+        $self->go_home();
+        return;
+    }
+
+    my $template = $self->get_template( { file => 'configure.tt' } );
+    my $available_transport_servers = Koha::File::Transports->search();
+
+    $template->param(
+        available_transport_servers => $available_transport_servers,
+        selected_transport_servers => $self->retrieve_data('selected_transport_servers')
+    );
+
+    $self->output_html( $template->output() );
+}
 
 1;
