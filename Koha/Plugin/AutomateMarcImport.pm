@@ -4,6 +4,7 @@ use Modern::Perl;
 
 use base qw(Koha::Plugins::Base);
 use Koha::File::Transports;
+use Koha::UploadedFile;
 use C4::Context;
 use Koha::Logger;
 
@@ -74,6 +75,17 @@ sub cronjob_nightly {
             if (substr($filename, -4) ne ".mrc" && substr($filename, -4) ne ".xml") {
                 next;
             }
+            my $localFile = Koha::UploadedFile->new({
+                hashvalue          => $unique_id, # subject to change
+                filename           => $filehash->{filename},
+                dir                => $self->{plugindir},
+                filesize           => $filehash->{a}->size,
+                owner              => undef,
+                uploadcategorycode => undef,
+                public             => undef,
+                permanent          => undef,
+            });
+            $unique_id += 1;
         }
     }
 }
