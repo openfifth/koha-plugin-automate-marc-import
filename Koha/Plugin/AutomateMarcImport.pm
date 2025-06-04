@@ -86,6 +86,7 @@ sub cronjob_nightly {
                 permanent          => undef,
             });
             $unique_id += 1;
+            $transport->download_file($filehash->{filename}, $localFile->full_path());
         }
     }
 }
