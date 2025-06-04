@@ -87,6 +87,7 @@ sub cronjob_nightly {
             });
             $unique_id += 1;
             $transport->download_file($filehash->{filename}, $localFile->full_path());
+            $self->_stage($localFile->full_path());
         }
     }
 }
@@ -104,4 +105,32 @@ sub _set_plugin_dir {
     $self->{plugindir} = $pluginsdir . "/Koha/Plugin/AutomateMarcImport";
 }
 
+sub _stage {
+    my ( $self, $input_file_path ) = @_;
+    my $record_type = "biblio";
+    my $encoding      = "UTF-8";
+    my $add_items     = 0;
+    my $batch_comment = "test comment";
+
+    # TODO: Two profiles in "stage-marc-import": pass the marc modification template depending on file name: one for hard copy and one for ebook
+    my $marc_mod_template_id = undef;
+
+    # add plugin config options for the following ?
+    my $matcher_id = 3; # TEMPORARILY set to 3 (KohaBiblio) for testing purposes
+    my $format = 'ISO2709';
+    my $no_replace = 0;
+    my $no_create = 0;
+    my $item_action = 'always_add';
+
+    # my $authorities   = 0;
+    # my $marc_mod_template    = '';
+
+    if ( !$input_file_path ) {
+        $self->{logger}->trace("$0: cannot open input file $input_file_path: $!\n");
+        return;
+    }
+
+    my $dbh = C4::Context->dbh;
+    $dbh->{AutoCommit} = 0;
+}
 1;
