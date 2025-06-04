@@ -164,6 +164,7 @@ sub _stage {
     $self->{logger}->trace("finished staging MARC records");
     my $num_invalid_records = scalar(@import_errors);
     my $num_with_matches = $self->_search_for_matches($record_type, $no_replace, $no_create, $item_action, $batch_id, $matcher_id);
+    $self->_log_summary($num_with_matches, $record_type, $num_input_records, $num_valid_records, $num_invalid_records, $input_file_path, $num_items, $batch_id);
     $dbh->commit();
 }
 
@@ -190,4 +191,28 @@ sub _search_for_matches {
     $self->{logger}->trace("Finished looking for matches\n");
     return $num_with_matches;
 }
+
+#WIP: good or horrible idea ? Again, reflects what stage_file.pl would've printed.
+sub _log_summary {
+    my ( $self, $num_with_matches, $record_type, $num_input_records, $num_valid_records, $num_invalid_records, $input_file_path, $num_items, $batch_id) = @_;
+
+    # TODO: refactor - see how similar processes get logged - this is based off of what gets printed when running stage_file.pl
+    $self->{logger}->trace("MARC record staging report");
+    $self->{logger}->trace("------------------------------------");
+    $self->{logger}->trace("Input file:                 $input_file_path");
+    $self->{logger}->trace("Record type:                $record_type");
+    $self->{logger}->trace("Number of input records:    $num_input_records");
+    $self->{logger}->trace("Number of valid records:    $num_valid_records");
+    $self->{logger}->trace("Number of invalid records:  $num_invalid_records");
+
+    $self->{logger}->trace("Number of records matched:  $num_with_matches\n");
+
+    if ( $record_type eq 'biblio' ) {
+        $self->{logger}->trace("Number of items parsed:  $num_items\n");
+    }
+    $self->{logger}->trace("\n");
+    $self->{logger}->trace("Batch number assigned:  $batch_id\n");
+    $self->{logger}->trace("\n");
+}
+
 1;
