@@ -9,6 +9,7 @@ use C4::Context;
 use Koha::Logger;
 use C4::ImportBatch
     qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
+use C4::Matcher;
 
 our $VERSION = "0.0.1";
 
@@ -161,6 +162,32 @@ sub _stage {
         \&_log_progress # TODO: figure this out
     );
     $self->{logger}->trace("finished staging MARC records");
+    my $num_invalid_records = scalar(@import_errors);
+    my $num_with_matches = $self->_search_for_matches($record_type, $no_replace, $no_create, $item_action, $batch_id, $matcher_id);
     $dbh->commit();
+}
+
+sub _search_for_matches {
+    my ( $self, $record_type, $no_replace, $no_create, $item_action, $batch_id, $matcher_id ) = @_;
+    my $num_with_matches = 0;
+    my $matcher = C4::Matcher->fetch( $matcher_id );
+    if ( defined $matcher ) {
+        SetImportBatchMatcher( $batch_id, $matcher_id );
+    } elsif ( $record_type eq 'biblio' ) {
+        $matcher = C4::Matcher->new($record_type);
+        $matcher->add_simple_matchpoint( 'isbn', 1000, '020', 'a', -1, 0, '' );
+        $matcher->add_simple_required_check(
+            '245', 'a', -1, 0, '',
+            '245', 'a', -1, 0, ''
+        );
+    }
+    # set default record overlay behavior
+    SetImportBatchOverlayAction( $batch_id, $no_replace ? 'ignore' : 'replace' );
+    SetImportBatchNoMatchAction( $batch_id, $no_create ? 'ignore' : 'create_new' );
+    SetImportBatchItemAction( $batch_id, $item_action );
+    $self->{logger}->trace("Started looking for matches with records already in database\n");
+    $num_with_matches = BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
+    $self->{logger}->trace("Finished looking for matches\n");
+    return $num_with_matches;
 }
 1;
