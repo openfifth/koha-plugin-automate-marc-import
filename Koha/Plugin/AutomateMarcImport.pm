@@ -67,6 +67,14 @@ sub cronjob_nightly {
         $transport->connect();
         $transport->change_directory($transport->download_directory);
         my $file_list = $transport->list_files();
+
+        my $unique_id = 1;
+        foreach my $filehash (@{$file_list}) {
+            my $filename = $filehash->{filename};
+            if (substr($filename, -4) ne ".mrc" && substr($filename, -4) ne ".xml") {
+                next;
+            }
+        }
     }
 }
 
