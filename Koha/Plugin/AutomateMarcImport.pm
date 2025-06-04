@@ -96,6 +96,42 @@ sub cronjob_nightly {
 }
 
 
+# TODO: Check that this script does not run more or less frequently than it needs to
+sub intranet_js {
+    my ( $self ) = @_;
+    my $staged_import_batches = {};
+    my $staged_import_batches_num = 0;
+
+    my $import_batches = GetAllImportBatches();
+    foreach my $import_batch (@{$import_batches}) {
+        if ($import_batch->{import_status} eq "staged" ||  $import_batch->{import_status} eq "staging") {
+            $staged_import_batches_num += 1;
+        }
+    }
+
+    if ($staged_import_batches_num == 0) {
+        return;
+    }
+
+    return  q|
+        <script>
+            if (window.location.href.includes('admin-home.pl')) {
+                const container = document.querySelector("main")
+                const msgContainer = document.createElement("div")
+                const linkToManageMarcImports = document.createElement("a")
+
+                msgContainer.textContent = 'There staged MARC files waiting to be commited. '
+                msgContainer.setAttribute('class', 'alert alert-info')
+                linkToManageMarcImports.setAttribute('href','/cgi-bin/koha/tools/manage-marc-import.pl')
+                linkToManageMarcImports.textContent ='Click here to view them.'
+
+                msgContainer.append(linkToManageMarcImports)
+                container.prepend(msgContainer)
+            }
+        </script>
+    |;
+}
+
 sub _set_plugin_dir {
     my ( $self ) = @_;
     if ($self->{plugindir}) {
