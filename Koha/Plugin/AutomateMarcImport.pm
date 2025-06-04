@@ -27,6 +27,7 @@ sub new {
 
     my $self = $class->SUPER::new($args);
     $self->{cgi} = CGI->new();
+    $self->_set_plugin_dir();
 
     return $self;
 }
@@ -51,6 +52,19 @@ sub configure {
     );
 
     $self->output_html( $template->output() );
+}
+
+
+sub _set_plugin_dir {
+    my ( $self ) = @_;
+    if ($self->{plugindir}) {
+        return;
+    }
+    my $pluginsdir = C4::Context->config("pluginsdir");
+    if (ref($pluginsdir) eq 'ARRAY') {
+        $pluginsdir = $pluginsdir->[0];
+    }
+    $self->{plugindir} = $pluginsdir . "/Koha/Plugin/AutomateMarcImport";
 }
 
 1;
