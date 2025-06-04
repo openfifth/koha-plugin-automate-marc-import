@@ -192,6 +192,12 @@ sub _search_for_matches {
     return $num_with_matches;
 }
 
+sub _log_progress {
+    my $num_input_records = shift;
+    my $logger = Koha::Logger->get;
+    $logger->trace("processed $num_input_records records");
+}
+
 #WIP: good or horrible idea ? Again, reflects what stage_file.pl would've printed.
 sub _log_summary {
     my ( $self, $num_with_matches, $record_type, $num_input_records, $num_valid_records, $num_invalid_records, $input_file_path, $num_items, $batch_id) = @_;
