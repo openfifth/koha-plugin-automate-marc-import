@@ -7,6 +7,8 @@ use Koha::File::Transports;
 use Koha::UploadedFile;
 use C4::Context;
 use Koha::Logger;
+use C4::ImportBatch
+    qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
 
 our $VERSION = "0.0.1";
 
@@ -132,5 +134,33 @@ sub _stage {
 
     my $dbh = C4::Context->dbh;
     $dbh->{AutoCommit} = 0;
+
+    my ( $errors, $marc_records );
+    if ( $format eq 'ISO2709' ) {;
+        ( $errors, $marc_records ) =
+            C4::ImportBatch::RecordsFromISO2709File( $input_file_path, $record_type, $encoding);
+    } elsif ( $format eq 'MARCXML' ) {
+        ( $errors, $marc_records ) =
+            C4::ImportBatch::RecordsFromMARCXMLFile( $input_file_path, $encoding);
+    }
+
+    #WIP: would something akin to this make sense?
+    while (my $error = shift @{$errors}) {
+        $self->{logger}->error($error);
+    }
+
+    my $num_input_records = ($marc_records) ? scalar(@$marc_records) : 0;
+
+    $self->{logger}->trace("MARC records staging process started");
+    my ( $batch_id, $num_valid_records, $num_items, @import_errors ) = BatchStageMarcRecords(
+        $record_type,                        $encoding,
+        $marc_records,                       $input_file_path,
+        $marc_mod_template_id,               $batch_comment,
+        '',                                  $add_items,
+        0,                                 100,
+        \&_log_progress # TODO: figure this out
+    );
+    $self->{logger}->trace("finished staging MARC records");
+    $dbh->commit();
 }
 1;
