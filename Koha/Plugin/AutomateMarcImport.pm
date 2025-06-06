@@ -168,12 +168,11 @@ sub _stage {
     # TODO: Two profiles in "stage-marc-import": pass the marc modification template depending on file name: one for hard copy and one for ebook
     my $marc_mod_template_id = undef;
 
-    # add plugin config options for the following ?
-    my $matcher_id = 3; # TEMPORARILY set to 3 (KohaBiblio) for testing purposes
-    my $format = 'ISO2709';
-    my $no_replace = 0;
-    my $no_create = 0;
-    my $item_action = 'always_add';
+    # add server-level config options for the following ?
+    my $matcher_id = $self->retrieve_data('selected_matcher');
+    my $overlay_action = $self->retrieve_data('overlay_action');
+    my $nomatch_action = $self->retrieve_data('nomatch_action');
+    my $item_action = $self->retrieve_data('item_action');;
 
     # my $authorities   = 0;
     # my $marc_mod_template    = '';
@@ -213,13 +212,13 @@ sub _stage {
     );
     $self->{logger}->trace("finished staging MARC records");
     my $num_invalid_records = scalar(@import_errors);
-    my $num_with_matches = $self->_search_for_matches($record_type, $no_replace, $no_create, $item_action, $batch_id, $matcher_id);
+    my $num_with_matches = $self->_search_for_matches($record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id);
     $self->_log_summary($num_with_matches, $record_type, $num_input_records, $num_valid_records, $num_invalid_records, $input_file_path, $num_items, $batch_id);
     $dbh->commit();
 }
 
 sub _search_for_matches {
-    my ( $self, $record_type, $no_replace, $no_create, $item_action, $batch_id, $matcher_id ) = @_;
+    my ( $self, $record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id ) = @_;
     my $num_with_matches = 0;
     my $matcher = C4::Matcher->fetch( $matcher_id );
     if ( defined $matcher ) {
@@ -233,8 +232,8 @@ sub _search_for_matches {
         );
     }
     # set default record overlay behavior
-    SetImportBatchOverlayAction( $batch_id, $no_replace ? 'ignore' : 'replace' );
-    SetImportBatchNoMatchAction( $batch_id, $no_create ? 'ignore' : 'create_new' );
+    SetImportBatchOverlayAction( $batch_id, $overlay_action ? 'ignore' : 'replace' );
+    SetImportBatchNoMatchAction( $batch_id, $nomatch_action ? 'ignore' : 'create_new' );
     SetImportBatchItemAction( $batch_id, $item_action );
     $self->{logger}->trace("Started looking for matches with records already in database\n");
     $num_with_matches = BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
