@@ -50,10 +50,78 @@
                             [% IF available_transport_servers.count %]
                             Cannot find the SFTP server you are looking for? Consider <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">adding</a> one.
                             [% ELSE %]
-                            No EDI vendors SFTP servers found, would you like to <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">add</a> one?
+                            No SFTP servers found, would you like to <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">add</a> one?
                             [% END %]
                         </div>
                     </fieldset>
+                    <fieldset class="rows">
+                        <legend>Look for existing records in catalog?</legend>
+                            <ol>
+                                <li>
+                                <label for="matcher">Record matching rule:</label>
+                                    <select name="matcher" id="matcher">
+                                        <option value="">Do not look for matching records</option>
+                                        [% FOREACH available_matcher IN available_matchers %]
+                                            <option value="[% available_matcher.matcher_id | html %]" [% IF selected_matcher == available_matcher.matcher_id %]selected[% END %]>[% available_matcher.code | html %] ([% available_matcher.description | html %]) </option>
+                                        [% END %]
+                                    </select>
+                                </li>
+                                <li>
+                                    <label for="overlay_action">Action if matching record found: </label>
+                                    <select name="overlay_action" id="overlay_action" class="[% class_name | html %]">
+                                        <option value="replace" [% IF overlay_action == 'replace' %]selected="selected"[% END %]> Replace existing record with incoming record</option>
+                                        <option value="create_new" [% IF overlay_action == 'create_new' %]selected="selected"[% END %]> Add incoming record</option>
+                                        <option value="ignore" [% IF overlay_action == 'ignore' %]selected="selected"[% END %]> Ignore incoming record (its items may still be processed)</option>
+                                    </select>
+                                </li>
+                                <li>
+                                    <label for="nomatch_action">Action if no match is found: </label>
+                                    <select name="nomatch_action" id="nomatch_action" class="[% class_name | html %]">
+                                        <option value="create_new" [% IF nomatch_action == 'create_new' %]selected="selected"[% END %]> Add incoming record</option>
+                                        <option value="ignore" [% IF nomatch_action == 'ignore' %]selected="selected"[% END %]> Ignore incoming record</option>
+                                    </select>
+                                </li>
+                            </ol>
+                            </li>
+                        </ol>
+                        <div class="alert alert-info">
+                            [% IF available_matchers.count != 0 %]
+                            Cannot find the matching rule you are looking for? Consider <a href="/cgi-bin/koha/admin/matching-rules.pl?op=add_matching_rule">adding</a> one.
+                            [% ELSE %]
+                            No matching rules found, would you like to <a href="/cgi-bin/koha/admin/matching-rules.pl?op=add_matching_rule">add</a> one?
+                            [% END %]
+                        </div>
+                    </fieldset>
+                        <fieldset class="rows" id="items">
+                            <legend>Check for embedded item record data?</legend>
+                            <ol>
+                                <li class="radio">
+                                    <input type="radio" id="parse_itemsyes" name="parse_items" value="1" [% IF parse_items == 1 %]checked[% END %]/>
+                                    <label for="parse_itemsyes">Yes</label>
+                                </li>
+                                <li class="radio">
+                                    <input type="radio" id="parse_itemsno" name="parse_items" value="0" [% IF parse_items == 0 %]checked[% END %]/>
+                                    <label for="parse_itemsno">No (If you do not check for items while staging you may not change this option later) </label>
+                                </li>
+                            </ol>
+                            <ol>
+                                <li>
+                                    <label for="item_action">How to process items: </label>
+                                    [% IF action == 'ignore' AND num_items == 0 %]
+                                        No items were found during staging
+                                        <input type="hidden" name="item_action" value="ignore" />
+                                    [% ELSE %]
+                                        <select name="item_action" id="item_action" class="[% class_name | html %]">
+                                            <option value="always_add" [% IF item_action == 'always_add' %]selected="selected"[% END %]> Always add items</option>
+                                            <option value="add_only_for_matches" [% IF item_action == 'add_only_for_matches' %]selected="selected"[% END %]> Add items only if matching bib was found</option>
+                                            <option value="add_only_for_new" [% IF item_action == 'add_only_for_new' %]selected="selected"[% END %]> Add items only if no matching bib was found</option>
+                                            <option value="replace" [% IF item_action == 'replace' %]selected="selected"[% END %]> Replace items if matching bib was found (only for existing items)</option>
+                                            <option value="ignore" [% IF item_action == 'ignore' %]selected="selected"[% END %]> Ignore items</option>
+                                        </select>
+                                    [% END %]
+                                </li>
+                            </ol>
+                        </fieldset>
                     <fieldset class="action">
                         <input type="hidden" name="save" value="1" />
                         <input type="submit" class="btn btn-primary" value="Save configuration" />

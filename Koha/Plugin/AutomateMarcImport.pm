@@ -43,18 +43,32 @@ sub configure {
     my $cgi = $self->{'cgi'};
 
     if ( $cgi->param('save') ) {
-        my $selected_transport_servers = join(',', sort {$a <=> $b } $cgi->multi_param('transport_servers'));
-        $self->store_data( { selected_transport_servers => $selected_transport_servers } );
+        $self->store_data( { 
+            item_action => scalar $cgi->param('item_action'),
+            nomatch_action => scalar $cgi->param('nomatch_action'),
+            overlay_action => scalar $cgi->param('overlay_action'),
+            parse_items => scalar $cgi->param('parse_items'),
+            selected_matcher => scalar $cgi->param('matcher'),
+            selected_transport_servers => join(',', sort {$a <=> $b } $cgi->multi_param('transport_servers')),
+            # format => scalar $cgi->param('format'), # determined programmatically
+        });
         $self->go_home();
         return;
     }
 
     my $template = $self->get_template( { file => 'configure.tt' } );
-    my $available_transport_servers = Koha::File::Transports->search();
+    my @available_matchers = C4::Matcher::GetMatcherList();
 
     $template->param(
-        available_transport_servers => $available_transport_servers,
-        selected_transport_servers => $self->retrieve_data('selected_transport_servers')
+        available_matchers => \@available_matchers,
+        available_transport_servers => Koha::File::Transports->search(),
+        item_action => $self->retrieve_data('item_action'),
+        nomatch_action => $self->retrieve_data('nomatch_action'),
+        overlay_action => $self->retrieve_data('overlay_action'),
+        parse_items => $self->retrieve_data('parse_items'),
+        selected_matcher => $self->retrieve_data('selected_matcher'),
+        selected_transport_servers => $self->retrieve_data('selected_transport_servers'),
+        # format => $self->retrieve_data('format'), # determined programmatically
     );
 
     $self->output_html( $template->output() );
