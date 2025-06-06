@@ -89,7 +89,9 @@ sub cronjob_nightly {
         my $unique_id = 1;
         foreach my $filehash (@{$file_list}) {
             my $filename = $filehash->{filename};
-            if (substr($filename, -4) ne ".mrc" && substr($filename, -4) ne ".xml") {
+            my $fileformat = $self->_identify_format($filename);
+            if (!defined $fileformat) {
+                $self->{logger}->error("Unsupported file format.");
                 next;
             }
             my $localFile = Koha::UploadedFile->new({
@@ -104,11 +106,10 @@ sub cronjob_nightly {
             });
             $unique_id += 1;
             $transport->download_file($filehash->{filename}, $localFile->full_path());
-            $self->_stage($localFile->full_path());
+            $self->_stage($localFile->full_path(), $fileformat);
         }
     }
 }
-
 
 # TODO: Check that this script does not run more or less frequently than it needs to
 sub intranet_js {
@@ -146,6 +147,17 @@ sub intranet_js {
     |;
 }
 
+sub _identify_format {
+    my ( $self, $filename ) = @_;
+    if (substr($filename, -4) eq ".xml") {
+        return 'MARCXML';
+    }
+    if (substr($filename, -4) eq ".mrc") {
+        return 'ISO2709';
+    }
+    return undef;
+}
+
 sub _set_plugin_dir {
     my ( $self ) = @_;
     if ($self->{plugindir}) {
@@ -159,7 +171,7 @@ sub _set_plugin_dir {
 }
 
 sub _stage {
-    my ( $self, $input_file_path ) = @_;
+    my ( $self, $input_file_path, $format ) = @_;
     my $record_type = "biblio";
     my $encoding      = "UTF-8";
     my $add_items     = 0;
