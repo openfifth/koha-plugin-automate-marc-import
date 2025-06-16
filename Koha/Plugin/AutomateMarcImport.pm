@@ -21,7 +21,7 @@ our $metadata = {
     author          => 'Open Fifth',
     date_authored   => '2022-05-19',
     date_updated    => '2022-05-19',
-    minimum_version => '24.11.00.000', #WIP: will be changed to effectively whichever version first contains the SFTP work once it gets upstreamed
+    minimum_version => '24.11.00.000', #TODO: update this to relevant Koha version once knows (dependency not yet upstreamed)
     maximum_version => undef,
     version         => $VERSION,
     description     => 'A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites',
@@ -364,6 +364,7 @@ sub _stage {
         \&_log_progress # TODO: figure this out
     );
     my $num_invalid_records = scalar(@import_errors);
+    # TODO: log invalid records errors
     my $num_with_matches = $self->_search_for_matches($record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id);
     $dbh->commit();
 }
@@ -395,6 +396,7 @@ sub _was_modified_since_last_fetch {
     return ($last_mod_time > $last_run_time);
 }
 
+#FIXME: do we need a logger subroutine to pass to BatchStageMarcRecords? If not: remove, and update _stage()
 sub _log_progress {
     my $num_input_records = shift;
     my $logger = Koha::Logger->get;
