@@ -7,6 +7,7 @@ use Koha::File::Transports;
 use Koha::UploadedFile;
 use C4::Context;
 use Koha::Logger;
+use Koha::ImportBatches;
 use C4::ImportBatch
     qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
 use C4::Matcher;
@@ -111,20 +112,14 @@ sub cronjob_nightly {
     }
 }
 
-# TODO: Check that this script does not run more or less frequently than it needs to
 sub intranet_js {
     my ( $self ) = @_;
-    my $staged_import_batches = {};
-    my $staged_import_batches_num = 0;
-
-    my $import_batches = GetAllImportBatches();
-    foreach my $import_batch (@{$import_batches}) {
-        if ($import_batch->{import_status} eq "staged" ||  $import_batch->{import_status} eq "staging") {
-            $staged_import_batches_num += 1;
-        }
+    if ($self->can('page') && $self->page != '/cgi-bin/koha/mainpage.pl') {
+        return;
     }
 
-    if ($staged_import_batches_num == 0) {
+    my $num_import_batches = Koha::ImportBatches->search({ import_status => 'staged' })->count;
+    if ($num_import_batches == 0) {
         return;
     }
 
