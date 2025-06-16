@@ -116,7 +116,11 @@ sub cronjob_nightly {
             });
             $unique_id += 1;
             $transport->download_file($filehash->{filename}, $localFile->full_path());
-            $self->_stage($localFile->full_path(), $fileformat);
+
+            my @split_filename = split(/\./, $filename );
+            my $profile_id = $self->_get_profile_id_by_filename($transport_id, $split_filename[0]);
+
+            $self->_stage($localFile->full_path(), $profile_id);
         }
     }
 }
@@ -195,6 +199,30 @@ sub _get_selected_transport_ids {
         push @selected_transport_ids, $setting_data->{transport_id};
     }
     return @selected_transport_ids;
+}
+
+sub _get_profile_id_by_filename {
+    my ( $self, $transport_id, $filename ) = @_;
+
+    my $default_profile_id_for_transport;
+    my $lc_filename = lc( $filename );
+
+    foreach my $setting_id (split(',', $self->retrieve_data( 'selected_setting_ids' ))) {
+        my $setting_data = decode_json($self->retrieve_data( $setting_id ));
+        if ( $transport_id != $setting_data->{transport_id} ) {
+            next;
+        }
+
+        if ( !defined $setting_data->{filenames} || $setting_data->{filenames} eq  "") {
+            $default_profile_id_for_transport = $setting_data->{profile_id};
+            next;
+        }
+
+        if ( $setting_data->{filenames} =~ /$lc_filename/) {
+            return $setting_data->{profile_id};
+        }
+    }
+    return $default_profile_id_for_transport;
 }
 
 sub _get_settings_for_display {
