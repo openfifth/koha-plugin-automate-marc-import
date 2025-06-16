@@ -123,17 +123,27 @@ sub intranet_js {
         return;
     }
 
-    return  q|
+    my $message = "";
+    my $link_text = "";
+    if ($num_import_batches == 1) {
+        $message = "There's a staged MARC file waiting to be reviewed and commited. ";
+        $link_text = "Click here to view it. ";
+    } else {
+        $message = "There are $num_import_batches staged MARC files waiting to be reviewed and commited. ";
+        $link_text = "Click here to view them. ";
+    }
+
+    return  "
         <script>
             if (window.location.href.includes('admin-home.pl')) {
                 const container = document.querySelector("main")
                 const msgContainer = document.createElement("div")
                 const linkToManageMarcImports = document.createElement("a")
 
-                msgContainer.textContent = 'There staged MARC files waiting to be commited. '
+                msgContainer.textContent = \"$message\"
                 msgContainer.setAttribute('class', 'alert alert-info')
                 linkToManageMarcImports.setAttribute('href','/cgi-bin/koha/tools/manage-marc-import.pl')
-                linkToManageMarcImports.textContent ='Click here to view them.'
+                linkToManageMarcImports.textContent = \"$link_text\"
 
                 msgContainer.append(linkToManageMarcImports)
                 container.prepend(msgContainer)
