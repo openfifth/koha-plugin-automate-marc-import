@@ -304,23 +304,32 @@ sub _set_setting_id {
 }
 
 sub _stage {
-    my ( $self, $input_file_path, $format ) = @_;
-    my $record_type = "biblio";
-    my $encoding      = "UTF-8";
-    my $add_items     = 0;
-    my $batch_comment = "test comment";
+    my ( $self, $input_file_path, $profile_id) = @_;
+    my $profile = Koha::ImportBatchProfiles->search({ id => $profile_id });
 
-    # TODO: Two profiles in "stage-marc-import": pass the marc modification template depending on file name: one for hard copy and one for ebook
-    my $marc_mod_template_id = undef;
+    # TODO: could we refactor this and assign the scalars directly?
+    my @batch_comment_arr        = $profile->get_column('comments');
+    my @record_type_arr          = $profile->get_column('record_type');
+    my @encoding_arr             = $profile->get_column('encoding');
+    my @format_arr               = $profile->get_column('format');
+    my @marc_mod_template_id_arr = $profile->get_column('template_id');
+    my @parse_items_arr          = $profile->get_column('parse_items');
+    my @matcher_id_arr           = $profile->get_column('matcher_id');
+    my @nomatch_action_arr       = $profile->get_column('nomatch_action');
+    my @overlay_action_arr       = $profile->get_column('overlay_action');
+    my @item_action_arr          = $profile->get_column('item_action');
 
-    # add server-level config options for the following ?
-    my $matcher_id = $self->retrieve_data('selected_matcher');
-    my $overlay_action = $self->retrieve_data('overlay_action');
-    my $nomatch_action = $self->retrieve_data('nomatch_action');
-    my $item_action = $self->retrieve_data('item_action');;
+    my $batch_comment = $batch_comment_arr[0];
+    my $record_type = $record_type_arr[0];
+    my $encoding = $encoding_arr[0];
+    my $format = $format_arr[0];
+    my $marc_mod_template_id = $marc_mod_template_id_arr[0];
+    my $parse_items = $parse_items_arr[0];
+    my $matcher_id = $matcher_id_arr[0];
+    my $nomatch_action = $nomatch_action_arr[0];
+    my $overlay_action = $overlay_action_arr[0];
+    my $item_action = $item_action_arr[0];
 
-    # my $authorities   = 0;
-    # my $marc_mod_template    = '';
 
     if ( !$input_file_path ) {
         $self->{logger}->trace("$0: cannot open input file $input_file_path: $!\n");
@@ -351,7 +360,7 @@ sub _stage {
         $record_type,                        $encoding,
         $marc_records,                       $input_file_path,
         $marc_mod_template_id,               $batch_comment,
-        '',                                  $add_items,
+        '',                                  $parse_items,
         0,                                 100,
         \&_log_progress # TODO: figure this out
     );
