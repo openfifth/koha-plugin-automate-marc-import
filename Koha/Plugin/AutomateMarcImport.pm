@@ -97,9 +97,11 @@ sub cronjob_nightly {
         my $unique_id = 1;
         foreach my $filehash (@{$file_list}) {
             my $filename = $filehash->{filename};
-            my $fileformat = $self->_identify_format($filename);
-            if (!defined $fileformat) {
-                $self->{logger}->error("Unsupported file format.");
+            my $filename_extension = substr($filename, -4);
+            if ($filename_extension ne '.mrc' && $filename_extension ne '.mrcx' && $filename_extension ne '.xml') {
+                next;
+            }     
+            if (!$self->_was_modified_since_last_fetch( $filehash )) {
                 next;
             }
             my $localFile = Koha::UploadedFile->new({
@@ -354,6 +356,14 @@ sub _search_for_matches {
     $num_with_matches = BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
     $self->{logger}->trace("Finished looking for matches\n");
     return $num_with_matches;
+}
+
+sub _was_modified_since_last_fetch {
+    my ( $self, $filehash ) = @_;
+    # FIXME: record and then retrieve the time when we last fetched from the transport instead?
+    my $last_run_time = time() - 86400;
+    my $last_mod_time = defined $filehash->{a}->mtime ? $filehash->{a}->mtime : $filehash->{a}->atime;
+    return ($last_mod_time > $last_run_time);
 }
 
 sub _log_progress {
