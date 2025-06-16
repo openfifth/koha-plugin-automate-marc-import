@@ -11,6 +11,8 @@ use Koha::ImportBatches;
 use C4::ImportBatch
     qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
 use C4::Matcher;
+use JSON qw( encode_json decode_json );
+use Koha::ImportBatchProfiles;
 
 our $VERSION = "0.0.1";
 
@@ -24,6 +26,8 @@ our $metadata = {
     version         => $VERSION,
     description     => 'A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites',
 };
+
+# IMPLEMENTED PLUGIN HOOKS
 
 sub new {
     my ( $class, $args ) = @_;
@@ -43,33 +47,33 @@ sub configure {
     my ( $self, $args  ) = @_;
     my $cgi = $self->{'cgi'};
 
-    if ( $cgi->param('save') ) {
-        $self->store_data( { 
-            item_action => scalar $cgi->param('item_action'),
-            nomatch_action => scalar $cgi->param('nomatch_action'),
-            overlay_action => scalar $cgi->param('overlay_action'),
-            parse_items => scalar $cgi->param('parse_items'),
-            selected_matcher => scalar $cgi->param('matcher'),
-            selected_transport_servers => join(',', sort {$a <=> $b } $cgi->multi_param('transport_servers')),
-            # format => scalar $cgi->param('format'), # determined programmatically
-        });
-        $self->go_home();
+    my $template = $self->get_template( { file => 'configure.tt' } );
+
+    if ( defined $cgi->param('op') && $cgi->param('op') eq 'save') {
+        $self->_save_setting( $cgi );
+        my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
+        print $cgi->redirect($redirect_url);
         return;
     }
 
-    my $template = $self->get_template( { file => 'configure.tt' } );
-    my @available_matchers = C4::Matcher::GetMatcherList();
+    if ( defined $cgi->param('op') && $cgi->param('op') eq 'delete') {
+        $self->_delete_setting( $cgi );
+        my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
+        print $cgi->redirect($redirect_url);
+        return;
+    }
+
+    my @automate_marc_import_plugin_settings = $self->_get_settings_for_display();
+
+    if ($cgi->param('op')) {
+        $template->param(op => $cgi->param('op'))
+    }
 
     $template->param(
-        available_matchers => \@available_matchers,
-        available_transport_servers => Koha::File::Transports->search(),
-        item_action => $self->retrieve_data('item_action'),
-        nomatch_action => $self->retrieve_data('nomatch_action'),
-        overlay_action => $self->retrieve_data('overlay_action'),
-        parse_items => $self->retrieve_data('parse_items'),
-        selected_matcher => $self->retrieve_data('selected_matcher'),
-        selected_transport_servers => $self->retrieve_data('selected_transport_servers'),
-        # format => $self->retrieve_data('format'), # determined programmatically
+        available_profiles => Koha::ImportBatchProfiles->search(),
+        available_transport => Koha::File::Transports->search(),
+        automate_marc_import_plugin_settings => \@automate_marc_import_plugin_settings,
+        automate_marc_import_plugin_settings_count => scalar @automate_marc_import_plugin_settings
     );
 
     $self->output_html( $template->output() );
@@ -152,15 +156,83 @@ sub intranet_js {
     ";
 }
 
-sub _identify_format {
-    my ( $self, $filename ) = @_;
-    if (substr($filename, -4) eq ".xml") {
-        return 'MARCXML';
+# SERVICES
+
+# Remove the relevant setting_id from the selected_setting_ids row in plugin_data (does not delete the setting row itself)
+sub _delete_setting {
+    my ( $self, $cgi ) = @_;
+    my $selected_transport_id = $cgi->param('selected_transport_id');
+    my $selected_setting_id = $cgi->param('selected_setting_id');
+    
+    my $updated_settings_ids;
+    foreach my $settings_id (split( /,/, $self->retrieve_data('selected_setting_ids') )) {
+        if ($settings_id != $selected_setting_id) {
+            $updated_settings_ids .=  $settings_id;
+            $updated_settings_ids .= ',';   
+        }
     }
-    if (substr($filename, -4) eq ".mrc") {
-        return 'ISO2709';
+    $self->store_data({
+        selected_setting_ids => $updated_settings_ids,
+    });
+    # FIXME: also store a list of archived settings ids?
+}
+
+sub _get_settings_for_display {
+    my ( $self ) = @_;
+    my  @automate_marc_import_plugin_settings;
+
+    foreach my $setting ( split( /,/, $self->retrieve_data('selected_setting_ids')) ) {
+        my $setting_data = decode_json($self->retrieve_data($setting));
+        my $transport = Koha::File::Transports->search({ id => $setting_data->{transport_id} });
+        my $profile = Koha::ImportBatchProfiles->search({ id => $setting_data->{profile_id} });
+
+        # formats the data so it can be easily rendered in the settings table on the plugin's configuration page
+        my %setting = (
+            id => $setting_data->{id},
+            transport_id => $transport->get_column('id'),
+            transport_name => $transport->get_column('name'),
+            profile_name => $profile->get_column('name'),
+            profile_comment => $profile->get_column('comments'),
+            profile_record_type => $profile->get_column('record_type'),
+            profile_character_encoding => $profile->get_column('encoding'),
+            profile_format => $profile->get_column('format'),
+            profile_parse_items => $profile->get_column('parse_items'),
+            profile_marc_modification_template_id => $profile->get_column('template_id'),
+            profile_record_matching_rule => $profile->get_column('matcher_id'),
+            profile_nomatch_action => $profile->get_column('nomatch_action'),
+            profile_overlay_action => $profile->get_column('overlay_action'),
+            profile_item_action => $profile->get_column('item_action'),
+            filenames => $setting_data->{filenames},
+        );
+        push @automate_marc_import_plugin_settings, \%setting;
     }
-    return undef;
+    return  @automate_marc_import_plugin_settings;
+}
+
+sub _save_setting {
+    my ( $self, $cgi ) = @_;
+
+    my $setting_id_list = $self->retrieve_data('selected_setting_ids') ? $self->retrieve_data('selected_setting_ids') : "";
+    my $setting_id = $self->_set_setting_id();
+
+    # add the new setting's id to the selected_setting_ids list so the setting may be easily retrieved later
+    my $updated_settings_id_list = $setting_id_list;
+    $updated_settings_id_list .=  "$setting_id",
+    $updated_settings_id_list .= ',';
+    
+    # FIXME: validate / sanitize input data
+    my %setting = ( 
+        id => $setting_id,
+        transport_id => $cgi->param('selected_transport_id'),
+        profile_id => $cgi->param('profile_id'),
+        filenames => lc($cgi->param('filenames')),
+    );
+
+    $self->store_data({
+        selected_setting_ids => $updated_settings_id_list,
+        $setting_id => encode_json(\%setting),
+        last_setting_id => $setting_id,
+    });
 }
 
 sub _set_plugin_dir {
@@ -173,6 +245,14 @@ sub _set_plugin_dir {
         $pluginsdir = $pluginsdir->[0];
     }
     $self->{plugindir} = $pluginsdir . "/Koha/Plugin/AutomateMarcImport";
+}
+
+# generates a unique identifier to assign to newly created settings
+sub _set_setting_id {
+    my ( $self ) = @_;
+    my $last_setting_id = $self->retrieve_data('last_setting_id') ? $self->retrieve_data('last_setting_id') : 0;
+    my $setting_id = $last_setting_id + 1;
+    return $setting_id;
 }
 
 sub _stage {

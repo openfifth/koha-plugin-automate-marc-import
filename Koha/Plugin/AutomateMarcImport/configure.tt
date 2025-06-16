@@ -21,7 +21,7 @@
             <a href="/cgi-bin/koha/plugins/plugins-home.pl?method=report">Plugins</a>
         [% END %]
         [% WRAPPER breadcrumb_item %]
-            <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS | uri %]&method=report">Automate Marc Import</a>
+            <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS | uri %]&method=report">Automate MARC Import Setting</a>
         [% END %]
         [% WRAPPER breadcrumb_item bc_active= 1 %]
             <span>Configuration</span>
@@ -29,110 +29,250 @@
     [% END #/ WRAPPER breadcrumbs %]
 [% END #/ WRAPPER sub-header.inc %]
 
-<div id="main container-fluid">
+<div class="main container-fluid">
     <div class="row">
         <div class="col-md-10 order-md-2 order-sm-1">
             <main>
-                <h1>Automate MARC Import and Staging - Configuration</h1>
-                <form method="get">
-                    <input type="hidden" name="class" value="[% CLASS %]"/>
-                    <input type="hidden" name="method" value="[% METHOD %]"/>
-                    <fieldset class="rows">
-                        <legend>(S)FTP servers to import MARC files from</legend>
-                        [% IF available_transport_servers.count %]
-                        <ol>
-                            [% FOREACH server IN available_transport_servers %]
-                            <li><input type="checkbox" name="transport_servers" value="[% server.id %]" [% IF selected_transport_servers.search(server.id) %]checked[% END %]><label>[% server.name %]</label></li>
+                [% IF op == 'add_form' %]
+                    <h1>New Automated MARC Import Setting</h1>
+                    <form method="get">
+                        <fieldset class="rows">
+                            <legend>Transport ((S)FTP server)</legend>
+                            <input type="hidden" name="class" value="[% CLASS %]"/>
+                            <input type="hidden" name="method" value="[% METHOD %]"/>
+                            <label for="transport" class="required">Transport name: </label>
+                            [% IF available_transport.count %]
+                            <select name="selected_transport_id" id="selected_transport_id" class="required">
+                                [% FOREACH transport IN available_transport %]
+                                    <option value="[% transport.id %]">[% transport.name %]</option>
+                                [% END %]
+                            </select>
                             [% END %]
-                        </ol>
-                        [% END %]     
-                        <div class="alert alert-info">
-                            [% IF available_transport_servers.count %]
-                            Cannot find the SFTP server you are looking for? Consider <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">adding</a> one.
-                            [% ELSE %]
-                            No SFTP servers found, would you like to <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">add</a> one?
-                            [% END %]
-                        </div>
-                    </fieldset>
-                    <fieldset class="rows">
-                        <legend>Look for existing records in catalog?</legend>
-                            <ol>
-                                <li>
-                                <label for="matcher">Record matching rule:</label>
-                                    <select name="matcher" id="matcher">
-                                        <option value="">Do not look for matching records</option>
-                                        [% FOREACH available_matcher IN available_matchers %]
-                                            <option value="[% available_matcher.matcher_id | html %]" [% IF selected_matcher == available_matcher.matcher_id %]selected[% END %]>[% available_matcher.code | html %] ([% available_matcher.description | html %]) </option>
+                            <span class="required">Required</span>
+                            <div class="alert alert-info">
+                                [% IF available_transport.count %]
+                                Cannot find the (S)FTP server you are looking for? Consider <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">adding</a> one.
+                                [% ELSE %]
+                                No (S)FTP servers found, would you like to <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">add</a> one?
+                                [% END %]
+                            </div>
+                        </fieldset>
+                        <fieldset class="rows">
+                            <legend>Profile</legend>
+                            <div class="row">
+                                <div class="col-sm-6">
+                                    <label for="profile" class="required">Profile name: </label>
+                                    <select name="profile_id" id="profile_id" class="required">
+                                        [% FOREACH profile IN available_profiles %]
+                                        <option value="[% profile.id %]">[% profile.name %]</option>
                                         [% END %]
                                     </select>
-                                </li>
-                                <li>
-                                    <label for="overlay_action">Action if matching record found: </label>
-                                    <select name="overlay_action" id="overlay_action" class="[% class_name | html %]">
-                                        <option value="replace" [% IF overlay_action == 'replace' %]selected="selected"[% END %]> Replace existing record with incoming record</option>
-                                        <option value="create_new" [% IF overlay_action == 'create_new' %]selected="selected"[% END %]> Add incoming record</option>
-                                        <option value="ignore" [% IF overlay_action == 'ignore' %]selected="selected"[% END %]> Ignore incoming record (its items may still be processed)</option>
-                                    </select>
-                                </li>
-                                <li>
-                                    <label for="nomatch_action">Action if no match is found: </label>
-                                    <select name="nomatch_action" id="nomatch_action" class="[% class_name | html %]">
-                                        <option value="create_new" [% IF nomatch_action == 'create_new' %]selected="selected"[% END %]> Add incoming record</option>
-                                        <option value="ignore" [% IF nomatch_action == 'ignore' %]selected="selected"[% END %]> Ignore incoming record</option>
-                                    </select>
-                                </li>
-                            </ol>
-                            </li>
-                        </ol>
-                        <div class="alert alert-info">
-                            [% IF available_matchers.count != 0 %]
-                            Cannot find the matching rule you are looking for? Consider <a href="/cgi-bin/koha/admin/matching-rules.pl?op=add_matching_rule">adding</a> one.
-                            [% ELSE %]
-                            No matching rules found, would you like to <a href="/cgi-bin/koha/admin/matching-rules.pl?op=add_matching_rule">add</a> one?
-                            [% END %]
-                        </div>
-                    </fieldset>
-                        <fieldset class="rows" id="items">
-                            <legend>Check for embedded item record data?</legend>
-                            <ol>
-                                <li class="radio">
-                                    <input type="radio" id="parse_itemsyes" name="parse_items" value="1" [% IF parse_items == 1 %]checked[% END %]/>
-                                    <label for="parse_itemsyes">Yes</label>
-                                </li>
-                                <li class="radio">
-                                    <input type="radio" id="parse_itemsno" name="parse_items" value="0" [% IF parse_items == 0 %]checked[% END %]/>
-                                    <label for="parse_itemsno">No (If you do not check for items while staging you may not change this option later) </label>
-                                </li>
-                            </ol>
-                            <ol>
-                                <li>
-                                    <label for="item_action">How to process items: </label>
-                                    [% IF action == 'ignore' AND num_items == 0 %]
-                                        No items were found during staging
-                                        <input type="hidden" name="item_action" value="ignore" />
-                                    [% ELSE %]
-                                        <select name="item_action" id="item_action" class="[% class_name | html %]">
-                                            <option value="always_add" [% IF item_action == 'always_add' %]selected="selected"[% END %]> Always add items</option>
-                                            <option value="add_only_for_matches" [% IF item_action == 'add_only_for_matches' %]selected="selected"[% END %]> Add items only if matching bib was found</option>
-                                            <option value="add_only_for_new" [% IF item_action == 'add_only_for_new' %]selected="selected"[% END %]> Add items only if no matching bib was found</option>
-                                            <option value="replace" [% IF item_action == 'replace' %]selected="selected"[% END %]> Replace items if matching bib was found (only for existing items)</option>
-                                            <option value="ignore" [% IF item_action == 'ignore' %]selected="selected"[% END %]> Ignore items</option>
-                                        </select>
-                                    [% END %]
-                                </li>
-                            </ol>
+                                    <span class="required">Required</span>
+                                    <div class="hint">When you select a profile it pre-fills your form with profile values.</div>
+                                    <div class="hint">Later you can modify your form and that's what matters on import.</div>
+                                </div>
+                                <div class="col-sm-6" id="profile_details_wrapper">
+                                    <table style="margin:0" id="profile_details_table">
+                                        <thead id="profile_details_thead">
+                                            <th> Selected profile: details<th>
+                                        </thead>
+                                        <tbody id="profile_details_tbody">
+                                            <tr>
+                                                <td id="profile_details_header_name">Profile name:</td>
+                                                <td id="name" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_comment">Comments about this file:</td>
+                                                <td id="comment" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_record_type">Record type:</td>
+                                                <td id="record_type" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_encoding">Character encoding:</td>
+                                                <td id="encoding" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_format">Format:</td>
+                                                <td id="format" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_parse_items">Parse items:</td>
+                                                <td id="parse_items" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_marc_modification_template_id">Template:</td>
+                                                <td id="template" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_matcher">Record matching rule:</td>
+                                                <td id="matcher" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_nomatch_action">Action if matching record found:</td>
+                                                <td id="nomatch_action" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_overlay_action">Action if no match is found:</td>
+                                                <td id="overlay_action" class="profile_details_value"></td>
+                                            </tr>
+                                            <tr>
+                                                <td id="profile_details_header_item_action">How to process items:</td>
+                                                <td id="item_action" class="profile_details_value"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="alert alert-info">
+                                [% IF available_profiles.count %]
+                                Cannot find the batch import profile you are looking for? Consider <a href="/cgi-bin/koha/tools/stage-marc-import.pl">adding</a> one.
+                                [% ELSE %]
+                                No batch import profiles found, would you like to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">add</a> one?
+                                [% END %]
+                            </div>
                         </fieldset>
-                    <fieldset class="action">
-                        <input type="hidden" name="save" value="1" />
-                        <input type="submit" class="btn btn-primary" value="Save configuration" />
-                        <a class="cancel" href="/cgi-bin/koha/plugins/plugins-home.pl?method=report">Cancel</a>
-					</fieldset>
-                </form>
+                        <fieldset class="rows">
+                            <legend>This configuration applies to:</legend>
+                            <label for="filenames">Filenames: </label>
+                            <textarea name="filenames"></textarea>
+                            <div class="hint">
+                                Please list the names of specific MARC files found in the selected transport that you would like this setting to apply to.
+                            </div>
+                            <div class="hint">
+                                You do not need to include file extensions. This list is not case-sensitive.
+                            </div>
+                            <div class="alert alert-info">
+                                If this field is left empty, the selected profile will become the default for the selected transport.
+                            </div>
+                        </fieldset>
+                        <fieldset class="action">
+                            <input type="hidden" name="op" value="save" />
+                            <input type="submit" class="btn btn-primary" value="Save Setting" />
+                            <a class="cancel" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]">Cancel</a> 
+                        </fieldset>
+                    </form>
+                [% ELSE %]
+                    <div id="toolbar" class="btn-toolbar">
+                        <a class="btn btn-default" id="new_automate_marc_import_setting" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=add_form"><i class="fa fa-plus"></i> New Automate MARC Import Setting</a>
+                    </div>
+                    <h1>Automate MARC Import Settings List</h1>
+                    [% IF automate_marc_import_plugin_settings_count < 1 %]
+                        <div class="alert alert-info" id="dno_servers_message">
+                            <p>
+                                <em>There are no Automate MARC Import Settings defined.</em><br />
+                                To create one, use the <strong>new Automate MARC Import Setting</strong> button above.
+                            </p>
+                        </div>
+                    [% ELSE %]
+                        <div class="page-section">
+                            <table id="automate_marc_import_setting">
+                                <thead>
+                                    <tr>
+                                        <th>Transport name</th>
+                                        <th>Filenames</th>
+                                        <th>Profile name</th>
+                                        <th>Comments about this file</th> 
+                                        <th>Record type</th>
+                                        <th>Character encoding</th>
+                                        <th>Format</th>
+                                        <th>Parse items</th>
+                                        <th>Template</th>
+                                        <th>Record matching rule</th>
+                                        <th>Action if matching record found</th>
+                                        <th>Action if no match is found</th>
+                                        <th>How to process items</th>
+                                        <th data-class-name="actions noExport">Actions</th>
+                                    </tr>
+                                </thead>
+                                <body>
+                                    [% FOREACH setting IN automate_marc_import_plugin_settings %]
+                                        <tr>
+                                            <td id="transport_name_[% setting.id %]">[% setting.transport_name %]</td>
+                                            <td id="filenames">[% setting.filenames %]</td>
+                                            <td id="profile_name_[% setting.id %]">[% setting.profile_name %]</td>
+                                            <td id="profile_comment_[% setting.id %]">[% setting.profile_comment %]</td>
+                                            <td id="profile_record_type_[% setting.id %]">[% setting.profile_record_type %]</td>
+                                            <td id="profile_character_encoding_[% setting.id %]">[% setting.profile_character_encoding %]</td>
+                                            <td id="profile_format_[% setting.id %]">[% setting.profile_format %]</td>
+                                            <td id="profile_parse_items_[% setting.id %]">[% setting.profile_parse_items %]</td>
+                                            <td id="profile_marc_modification_template_id_[% setting.id %]">[% setting.profile_marc_modification_template_id %]</td>
+                                            <td id="profile_record_matching_rule_[% setting.id %]">[% setting.profile_record_matching_rule %]</td>
+                                            <td id="profile_nomatch_action_[% setting.id %]">[% setting.profile_nomatch_action %]</td>
+                                            <td id="profile_overlay_action_[% setting.id %]">[% setting.profile_overlay_action %]</td>
+                                            <td id="profile_item_action_[% setting.id %]">[% setting.profile_item_action %]</td>
+                                            <td data-class-name="actions noExport">
+                                                <a class="btn btn-default btn-xs delete_server" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=delete&selected_setting_id=[% setting.id %]"><i class="fa fa-trash-can" aria-hidden="true"></i>Delete</a>
+                                            </td>
+                                        </tr>
+                                    [% END %]
+                                </body>
+                            </table>
+                        </div>
+                        <div class="alert alert-info">
+                            Profiles with no filenames specified will be treated as default for the relevant transport, and apply to all MARC files retrieved from it.
+                        </div>
+                    [% END %]
+                [% END %]
             </main>
         </div>
         <div class="col-md-2 order-sm-2 order-md-1">
-            <aside></aside>
+            <aside> [% INCLUDE 'admin-menu.inc' %] </aside>
         </div>
-    </div>
+    
+    [% MACRO jsinclude BLOCK %]
+        [% Asset.js("js/admin-menu.js") | $raw %]
+        <script>
+            // TODO: refactor
+            $(document).ready(function(){
+                if (!window.location.href.includes('plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=add_form')) {
+                    return;
+                }
+                getProfiles().then((profiles) => {
+                    document.getElementById('name').textContent = profiles[0].name
+                    document.getElementById('comment').textContent = profiles[0].comments
+                    document.getElementById('item_action').textContent = profiles[0].item_action
+                    document.getElementById('record_type').textContent = profiles[0].record_type
+                    document.getElementById('encoding').textContent = profiles[0].encoding
+                    document.getElementById('format').textContent = profiles[0].format
+                    document.getElementById('parse_items').textContent = profiles[0].parse_items
+                    document.getElementById('template').textContent = profiles[0].template_id                   
+                    document.getElementById('matcher').textContent = profiles[0].matcher_id
+                    document.getElementById('overlay_action').textContent = profiles[0].overlay_action
+                    document.getElementById('nomatch_action').textContent = profiles[0].nomatch_action
+                    document.getElementById('item_action').textContent = profiles[0].item_action
+                    
+                    document.getElementById('profile_id').addEventListener('change', (e) => {
+                        document.getElementById('name').textContent = profiles[e.target.value - 1].name
+                        document.getElementById('comment').textContent = profiles[e.target.value - 1].comments
+                        document.getElementById('item_action').textContent = profiles[e.target.value - 1].item_action
+                        document.getElementById('record_type').textContent = profiles[e.target.value - 1].record_type
+                        document.getElementById('encoding').textContent = profiles[e.target.value - 1].encoding
+                        document.getElementById('format').textContent = profiles[e.target.value - 1].format
+                        document.getElementById('parse_items').textContent = profiles[e.target.value - 1].parse_items
+                        document.getElementById('template').textContent = profiles[e.target.value - 1].template_id                   
+                        document.getElementById('matcher').textContent = profiles[e.target.value - 1].matcher_id
+                        document.getElementById('overlay_action').textContent = profiles[e.target.value - 1].overlay_action
+                        document.getElementById('nomatch_action').textContent = profiles[e.target.value - 1].nomatch_action
+                        document.getElementById('item_action').textContent = profiles[e.target.value - 1].item_action
+                    })
+                });
+            })
 
+            // borrowed from /koha-tmpl/intranet-tmpl/prog/en/modules/tools/stage-marc-import.tt
+            const getProfiles = (id) => {
+                const select = $("#profile");
+                $("option[value!='']", select).remove();
+                return new Promise(function(resolve, reject) {
+                    $.ajax("/api/v1/import_batch_profiles")
+                    .then(resolve, reject)
+                })
+                .then(function(profiles){
+                    return profiles
+                });
+            }
+        </script>
+    [% END %]
+    </div>
 [% INCLUDE 'intranet-bottom.inc' %]
