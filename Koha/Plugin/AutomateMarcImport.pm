@@ -332,7 +332,7 @@ sub _stage {
 
 
     if ( !$input_file_path ) {
-        $self->{logger}->trace("$0: cannot open input file $input_file_path: $!\n");
+        $self->{logger}->error("Cannot open input file $input_file_path: $!\n");
         return;
     }
 
@@ -355,7 +355,6 @@ sub _stage {
 
     my $num_input_records = ($marc_records) ? scalar(@$marc_records) : 0;
 
-    $self->{logger}->trace("MARC records staging process started");
     my ( $batch_id, $num_valid_records, $num_items, @import_errors ) = BatchStageMarcRecords(
         $record_type,                        $encoding,
         $marc_records,                       $input_file_path,
@@ -364,16 +363,13 @@ sub _stage {
         0,                                 100,
         \&_log_progress # TODO: figure this out
     );
-    $self->{logger}->trace("finished staging MARC records");
     my $num_invalid_records = scalar(@import_errors);
     my $num_with_matches = $self->_search_for_matches($record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id);
-    $self->_log_summary($num_with_matches, $record_type, $num_input_records, $num_valid_records, $num_invalid_records, $input_file_path, $num_items, $batch_id);
     $dbh->commit();
 }
 
 sub _search_for_matches {
     my ( $self, $record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id ) = @_;
-    my $num_with_matches = 0;
     my $matcher = C4::Matcher->fetch( $matcher_id );
     if ( defined $matcher ) {
         SetImportBatchMatcher( $batch_id, $matcher_id );
@@ -385,14 +381,10 @@ sub _search_for_matches {
             '245', 'a', -1, 0, ''
         );
     }
-    # set default record overlay behavior
     SetImportBatchOverlayAction( $batch_id, $overlay_action ? 'ignore' : 'replace' );
     SetImportBatchNoMatchAction( $batch_id, $nomatch_action ? 'ignore' : 'create_new' );
     SetImportBatchItemAction( $batch_id, $item_action );
-    $self->{logger}->trace("Started looking for matches with records already in database\n");
-    $num_with_matches = BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
-    $self->{logger}->trace("Finished looking for matches\n");
-    return $num_with_matches;
+    return BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
 }
 
 sub _was_modified_since_last_fetch {
@@ -407,29 +399,6 @@ sub _log_progress {
     my $num_input_records = shift;
     my $logger = Koha::Logger->get;
     $logger->trace("processed $num_input_records records");
-}
-
-#WIP: good or horrible idea ? Again, reflects what stage_file.pl would've printed.
-sub _log_summary {
-    my ( $self, $num_with_matches, $record_type, $num_input_records, $num_valid_records, $num_invalid_records, $input_file_path, $num_items, $batch_id) = @_;
-
-    # TODO: refactor - see how similar processes get logged - this is based off of what gets printed when running stage_file.pl
-    $self->{logger}->trace("MARC record staging report");
-    $self->{logger}->trace("------------------------------------");
-    $self->{logger}->trace("Input file:                 $input_file_path");
-    $self->{logger}->trace("Record type:                $record_type");
-    $self->{logger}->trace("Number of input records:    $num_input_records");
-    $self->{logger}->trace("Number of valid records:    $num_valid_records");
-    $self->{logger}->trace("Number of invalid records:  $num_invalid_records");
-
-    $self->{logger}->trace("Number of records matched:  $num_with_matches\n");
-
-    if ( $record_type eq 'biblio' ) {
-        $self->{logger}->trace("Number of items parsed:  $num_items\n");
-    }
-    $self->{logger}->trace("\n");
-    $self->{logger}->trace("Batch number assigned:  $batch_id\n");
-    $self->{logger}->trace("\n");
 }
 
 1;
