@@ -81,12 +81,15 @@ sub configure {
 
 sub cronjob_nightly {
     my ( $self ) = @_;
-    foreach my $transportId (split(',', $self->retrieve_data('selected_transport_servers'))) {
-        my $transport = Koha::File::Transports->find($transportId);
-        if (!defined $transport->download_directory) {
-            $self->{logger}->error($transport->name . " does not have a download directory set and therefore could not be used.");
-            next;
-        }
+
+    foreach my $transport_id ( $self->_get_selected_transport_ids() ) {
+        my $transport = Koha::File::Transports->find($transport_id);
+
+        # FIXME: apply this check?
+        # if (!defined $transport->download_directory) {
+        #     $self->{logger}->error($transport->name . " does not have a download directory set and therefore could not be used.");
+        #     next;
+        # }
         $transport->connect();
         $transport->change_directory($transport->download_directory);
         my $file_list = $transport->list_files();
@@ -175,6 +178,21 @@ sub _delete_setting {
         selected_setting_ids => $updated_settings_ids,
     });
     # FIXME: also store a list of archived settings ids?
+}
+ 
+sub _get_selected_transport_ids {
+    my ( $self ) = @_;
+    my @selected_transport_ids;
+
+    foreach my $setting_id (split(',', $self->retrieve_data( 'selected_setting_ids' ))) {
+        my $setting_data = decode_json($self->retrieve_data( $setting_id ));
+        # skip duplicates
+        if ( grep  { $_ == $setting_data->{transport_id}} @selected_transport_ids ) {
+            next;
+        }
+        push @selected_transport_ids, $setting_data->{transport_id};
+    }
+    return @selected_transport_ids;
 }
 
 sub _get_settings_for_display {
