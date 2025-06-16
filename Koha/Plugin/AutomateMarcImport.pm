@@ -135,10 +135,10 @@ sub intranet_js {
 
     return  "
         <script>
-            if (window.location.href.includes('admin-home.pl')) {
-                const container = document.querySelector("main")
-                const msgContainer = document.createElement("div")
-                const linkToManageMarcImports = document.createElement("a")
+            if (window.location.href.includes('mainpage.pl')) {
+                const container = document.querySelector('.biglinks-list').parentElement.parentElement
+                const msgContainer = document.createElement('div')
+                const linkToManageMarcImports = document.createElement('a')
 
                 msgContainer.textContent = \"$message\"
                 msgContainer.setAttribute('class', 'alert alert-info')
@@ -146,10 +146,10 @@ sub intranet_js {
                 linkToManageMarcImports.textContent = \"$link_text\"
 
                 msgContainer.append(linkToManageMarcImports)
-                container.prepend(msgContainer)
+                container.append(msgContainer)
             }
         </script>
-    |;
+    ";
 }
 
 sub _identify_format {
