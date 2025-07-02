@@ -15,6 +15,7 @@ use JSON qw( encode_json decode_json );
 use Koha::ImportBatchProfiles;
 use Scalar::Util qw(looks_like_number);
 use Try::Tiny qw(catch try);
+use File::Basename qw(fileparse);
 
 our $VERSION = "0.0.1";
 
@@ -142,8 +143,9 @@ sub cronjob_nightly {
         my $unique_id = 1;
         foreach my $filehash (@{$file_list}) {
             my $filename = $filehash->{filename};
-            my $filename_extension = substr($filename, -4);
-            if ($filename_extension ne '.mrc' && $filename_extension ne '.mrcx' && $filename_extension ne '.xml') {
+            
+            # Check if file has a supported MARC extension
+            if (!$self->_is_supported_marc_file($filename)) {
                 next;
             }     
             if (!$self->_was_modified_since_last_fetch( $filehash )) {
@@ -542,6 +544,26 @@ sub _search_for_matches {
     SetImportBatchNoMatchAction( $batch_id, $nomatch_action ? 'ignore' : 'create_new' );
     SetImportBatchItemAction( $batch_id, $item_action );
     return BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
+}
+
+sub _is_supported_marc_file {
+    my ( $self, $filename ) = @_;
+    
+    return 0 unless defined $filename && $filename ne '';
+    
+    # Use File::Basename to properly extract the extension
+    my ($name, $path, $extension) = fileparse($filename, qr/\.[^.]*/);
+    
+    return 0 unless defined $extension;
+    
+    # Convert to lowercase for case-insensitive comparison
+    $extension = lc($extension);
+    
+    # Define supported MARC file extensions
+    my @supported_extensions = ('.mrc', '.mrcx', '.xml', '.marcxml');
+    
+    # Check if extension is in our supported list
+    return grep { $_ eq $extension } @supported_extensions;
 }
 
 sub _was_modified_since_last_fetch {
