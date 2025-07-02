@@ -16,6 +16,7 @@ use Koha::ImportBatchProfiles;
 use Scalar::Util qw(looks_like_number);
 use Try::Tiny qw(catch try);
 use File::Basename qw(fileparse);
+use Koha::Database;
 
 our $VERSION = "0.0.1";
 
@@ -490,41 +491,80 @@ sub _stage {
 
 
     if ( !$input_file_path ) {
-        $self->{logger}->error("Cannot open input file $input_file_path: $!\n");
+        $self->{logger}->error("Cannot open input file $input_file_path: $!");
         return;
     }
 
-    my $dbh = C4::Context->dbh;
-    $dbh->{AutoCommit} = 0;
+    # Use modern Koha database transaction pattern
+    my $schema = Koha::Database->new()->schema();
+    
+    my $batch_id;
+    try {
+        $batch_id = $schema->storage->txn_do(sub {
+            
+            # Parse MARC records from file
+            my ( $errors, $marc_records );
+            if ( $format eq 'ISO2709' ) {
+                ( $errors, $marc_records ) =
+                    C4::ImportBatch::RecordsFromISO2709File( $input_file_path, $record_type, $encoding);
+            } elsif ( $format eq 'MARCXML' ) {
+                ( $errors, $marc_records ) =
+                    C4::ImportBatch::RecordsFromMARCXMLFile( $input_file_path, $encoding);
+            } else {
+                die "Unsupported file format: $format";
+            }
 
-    my ( $errors, $marc_records );
-    if ( $format eq 'ISO2709' ) {;
-        ( $errors, $marc_records ) =
-            C4::ImportBatch::RecordsFromISO2709File( $input_file_path, $record_type, $encoding);
-    } elsif ( $format eq 'MARCXML' ) {
-        ( $errors, $marc_records ) =
-            C4::ImportBatch::RecordsFromMARCXMLFile( $input_file_path, $encoding);
-    }
+            # Log any parsing errors
+            if ($errors && @{$errors}) {
+                foreach my $error (@{$errors}) {
+                    $self->{logger}->error("MARC parsing error: $error");
+                }
+            }
 
-    #WIP: would something akin to this make sense?
-    while (my $error = shift @{$errors}) {
-        $self->{logger}->error($error);
-    }
+            my $num_input_records = ($marc_records) ? scalar(@$marc_records) : 0;
+            if ($num_input_records == 0) {
+                die "No valid MARC records found in file";
+            }
 
-    my $num_input_records = ($marc_records) ? scalar(@$marc_records) : 0;
+            $self->{logger}->info("Staging $num_input_records MARC records from file");
 
-    my ( $batch_id, $num_valid_records, $num_items, @import_errors ) = BatchStageMarcRecords(
-        $record_type,                        $encoding,
-        $marc_records,                       $input_file_path,
-        $marc_mod_template_id,               $batch_comment,
-        '',                                  $parse_items,
-        0,                                 100,
-        \&_log_progress # TODO: figure this out
-    );
-    my $num_invalid_records = scalar(@import_errors);
-    # TODO: log invalid records errors
-    my $num_with_matches = $self->_search_for_matches($record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id);
-    $dbh->commit();
+            # Stage MARC records in batch
+            my ( $batch_id, $num_valid_records, $num_items, @import_errors ) = BatchStageMarcRecords(
+                $record_type,                        $encoding,
+                $marc_records,                       $input_file_path,
+                $marc_mod_template_id,               $batch_comment,
+                '',                                  $parse_items,
+                0,                                   100,
+                \&_log_progress
+            );
+
+            # Log staging errors if any
+            my $num_invalid_records = scalar(@import_errors);
+            if ($num_invalid_records > 0) {
+                $self->{logger}->warn("$num_invalid_records records had import errors during staging");
+                foreach my $import_error (@import_errors) {
+                    $self->{logger}->error("Import error: $import_error");
+                }
+            }
+
+            if (!$batch_id) {
+                die "Failed to create import batch";
+            }
+
+            # Set up record matching and overlay actions
+            my $num_with_matches = $self->_search_for_matches($record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id);
+
+            $self->{logger}->info("Successfully staged batch $batch_id: $num_valid_records valid records, $num_with_matches potential matches");
+            
+            return $batch_id;
+        });
+        
+    } catch {
+        $self->{logger}->error("Failed to stage MARC file '$input_file_path': $_");
+        die "Staging transaction failed: $_";
+    };
+    
+    return $batch_id;
 }
 
 sub _search_for_matches {
