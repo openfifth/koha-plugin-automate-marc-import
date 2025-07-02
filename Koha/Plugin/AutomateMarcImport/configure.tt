@@ -35,16 +35,22 @@
             <main>
                 [% IF op == 'add_form' %]
                     <h1>New Automated MARC Import Setting</h1>
-                    <form method="get">
+                    [% IF error_message %]
+                        <div class="alert alert-danger">
+                            <strong>Error:</strong> [% error_message | html %]
+                        </div>
+                    [% END %]
+                    <form method="get" id="automate_marc_import_form">
                         <fieldset class="rows">
                             <legend>Transport ((S)FTP server)</legend>
                             <input type="hidden" name="class" value="[% CLASS %]"/>
                             <input type="hidden" name="method" value="[% METHOD %]"/>
-                            <label for="transport" class="required">Transport name: </label>
+                            <label for="selected_transport_id" class="required">Transport name: </label>
                             [% IF available_transport.count %]
-                            <select name="selected_transport_id" id="selected_transport_id" class="required">
+                            <select name="selected_transport_id" id="selected_transport_id" class="required" required="required">
+                                <option value="">-- Select a transport --</option>
                                 [% FOREACH transport IN available_transport %]
-                                    <option value="[% transport.id %]">[% transport.name %]</option>
+                                    <option value="[% transport.id %]"[% IF selected_transport_id == transport.id %] selected="selected"[% END %]>[% transport.name %]</option>
                                 [% END %]
                             </select>
                             [% END %]
@@ -61,10 +67,11 @@
                             <legend>Profile</legend>
                             <div class="row">
                                 <div class="col-sm-6">
-                                    <label for="profile" class="required">Profile name: </label>
-                                    <select name="profile_id" id="profile_id" class="required">
+                                    <label for="profile_id" class="required">Profile name: </label>
+                                    <select name="profile_id" id="profile_id" class="required" required="required">
+                                        <option value="">-- Select a profile --</option>
                                         [% FOREACH profile IN available_profiles %]
-                                        <option value="[% profile.id %]">[% profile.name %]</option>
+                                        <option value="[% profile.id %]"[% IF profile_id == profile.id %] selected="selected"[% END %]>[% profile.name %]</option>
                                         [% END %]
                                     </select>
                                     <span class="required">Required</span>
@@ -136,7 +143,7 @@
                         <fieldset class="rows">
                             <legend>This configuration applies to:</legend>
                             <label for="filenames">Filenames: </label>
-                            <textarea name="filenames"></textarea>
+                            <textarea name="filenames">[% filenames | html %]</textarea>
                             <div class="hint">
                                 Please list the names of specific MARC files found in the selected transport that you would like this setting to apply to.
                             </div>
@@ -223,6 +230,7 @@
     
     [% MACRO jsinclude BLOCK %]
         [% Asset.js("js/admin-menu.js") | $raw %]
+        [% Asset.js("lib/jquery/plugins/jquery.validate.min.js") | $raw %]
         <script>
             // TODO: refactor
             $(document).ready(function(){
@@ -272,6 +280,49 @@
                     return profiles
                 });
             }
+            
+            // Add form validation using jQuery Validate (Koha standard)
+            $(document).ready(function(){
+                // Only apply validation on the add form
+                if (window.location.href.includes('op=add_form') || $('#automate_marc_import_form').length) {
+                    $('#automate_marc_import_form').validate({
+                        rules: {
+                            selected_transport_id: {
+                                required: true
+                            },
+                            profile_id: {
+                                required: true
+                            }
+                        },
+                        messages: {
+                            selected_transport_id: {
+                                required: "Transport selection is required"
+                            },
+                            profile_id: {
+                                required: "Profile selection is required"
+                            }
+                        },
+                        errorPlacement: function(error, element) {
+                            error.insertAfter(element.next('.required'));
+                        },
+                        highlight: function(element, errorClass, validClass) {
+                            $(element).addClass('error');
+                        },
+                        unhighlight: function(element, errorClass, validClass) {
+                            $(element).removeClass('error');
+                        },
+                        submitHandler: function(form) {
+                            // Prevent double submission
+                            if (form.beenSubmitted) {
+                                return false;
+                            } else {
+                                form.beenSubmitted = true;
+                                form.submit();
+                            }
+                        }
+                    });
+                }
+            });
         </script>
     [% END %]
     </div>

@@ -13,6 +13,7 @@ use C4::ImportBatch
 use C4::Matcher;
 use JSON qw( encode_json decode_json );
 use Koha::ImportBatchProfiles;
+use Scalar::Util qw(looks_like_number);
 
 our $VERSION = "0.0.1";
 
@@ -50,10 +51,22 @@ sub configure {
     my $template = $self->get_template( { file => 'configure.tt' } );
 
     if ( defined $cgi->param('op') && $cgi->param('op') eq 'save') {
-        $self->_save_setting( $cgi );
-        my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
-        print $cgi->redirect($redirect_url);
-        return;
+        my $save_result = $self->_save_setting( $cgi );
+        if ($save_result->{success}) {
+            my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
+            print $cgi->redirect($redirect_url);
+            return;
+        } else {
+            # Display error message to user
+            $template->param(
+                error_message => $save_result->{error},
+                op => 'add_form',
+                # Pre-populate form with submitted values
+                selected_transport_id => $cgi->param('selected_transport_id'),
+                profile_id => $cgi->param('profile_id'),
+                filenames => $cgi->param('filenames'),
+            );
+        }
     }
 
     if ( defined $cgi->param('op') && $cgi->param('op') eq 'delete') {
@@ -257,8 +270,89 @@ sub _get_settings_for_display {
     return  @automate_marc_import_plugin_settings;
 }
 
+sub _validate_cgi_params {
+    my ( $self, $cgi ) = @_;
+    
+    # Get parameters
+    my $transport_id = $cgi->param('selected_transport_id');
+    my $profile_id = $cgi->param('profile_id');
+    my $filenames = $cgi->param('filenames') // '';
+    
+    # Check required fields are present
+    if (!defined $transport_id || $transport_id eq '') {
+        return { valid => 0, error => "Transport selection is required" };
+    }
+    
+    if (!defined $profile_id || $profile_id eq '') {
+        return { valid => 0, error => "Profile selection is required" };
+    }
+    
+    # Validate transport_id is a positive integer
+    if (!looks_like_number($transport_id) || $transport_id <= 0) {
+        return { valid => 0, error => "Invalid transport selection" };
+    }
+    
+    # Validate profile_id is a positive integer  
+    if (!looks_like_number($profile_id) || $profile_id <= 0) {
+        return { valid => 0, error => "Invalid profile selection" };
+    }
+    
+    # Verify transport exists
+    my $transport = Koha::File::Transports->find($transport_id);
+    if (!$transport) {
+        return { valid => 0, error => "Transport with ID $transport_id does not exist" };
+    }
+    
+    # Verify profile exists
+    my $profile = Koha::ImportBatchProfiles->find($profile_id);
+    if (!$profile) {
+        return { valid => 0, error => "Profile with ID $profile_id does not exist" };
+    }
+    
+    # Sanitize filenames
+    my $sanitized_filenames = $self->_sanitize_filenames($filenames);
+    
+    return {
+        valid => 1,
+        data => {
+            transport_id => int($transport_id),
+            profile_id => int($profile_id),
+            filenames => $sanitized_filenames,
+        }
+    };
+}
+
+sub _sanitize_filenames {
+    my ( $self, $filenames ) = @_;
+    
+    return '' unless defined $filenames;
+    
+    # Convert to lowercase
+    $filenames = lc($filenames);
+    
+    # Remove dangerous characters (path separators, null bytes, control chars)
+    $filenames =~ s/[\/\\:\0\x00-\x1f\x7f-\x9f]//g;
+    
+    # Limit length to prevent DoS
+    if (length($filenames) > 1000) {
+        $filenames = substr($filenames, 0, 1000);
+    }
+    
+    # Trim whitespace
+    $filenames =~ s/^\s+|\s+$//g;
+    
+    return $filenames;
+}
+
 sub _save_setting {
     my ( $self, $cgi ) = @_;
+
+    # Validate input parameters
+    my $validation_result = $self->_validate_cgi_params($cgi);
+    if (!$validation_result->{valid}) {
+        $self->{logger}->error("Input validation failed: " . $validation_result->{error});
+        return { success => 0, error => $validation_result->{error} };
+    }
 
     my $setting_id_list = $self->retrieve_data('selected_setting_ids') ? $self->retrieve_data('selected_setting_ids') : "";
     my $setting_id = $self->_set_setting_id();
@@ -268,19 +362,29 @@ sub _save_setting {
     $updated_settings_id_list .=  "$setting_id",
     $updated_settings_id_list .= ',';
     
-    # FIXME: validate / sanitize input data
+    # Use validated and sanitized data
     my %setting = ( 
         id => $setting_id,
-        transport_id => $cgi->param('selected_transport_id'),
-        profile_id => $cgi->param('profile_id'),
-        filenames => lc($cgi->param('filenames')),
+        transport_id => $validation_result->{data}->{transport_id},
+        profile_id => $validation_result->{data}->{profile_id},
+        filenames => $validation_result->{data}->{filenames},
     );
 
-    $self->store_data({
-        selected_setting_ids => $updated_settings_id_list,
-        $setting_id => encode_json(\%setting),
-        last_setting_id => $setting_id,
-    });
+    eval {
+        $self->store_data({
+            selected_setting_ids => $updated_settings_id_list,
+            $setting_id => encode_json(\%setting),
+            last_setting_id => $setting_id,
+        });
+    };
+    
+    if ($@) {
+        $self->{logger}->error("Failed to save setting: $@");
+        return { success => 0, error => "Failed to save setting. Please try again." };
+    }
+    
+    $self->{logger}->info("Successfully saved new setting with ID: $setting_id");
+    return { success => 1 };
 }
 
 sub _set_plugin_dir {
