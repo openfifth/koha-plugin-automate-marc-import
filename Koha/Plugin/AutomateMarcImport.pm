@@ -14,6 +14,7 @@ use C4::Matcher;
 use JSON qw( encode_json decode_json );
 use Koha::ImportBatchProfiles;
 use Scalar::Util qw(looks_like_number);
+use Try::Tiny qw(catch try);
 
 our $VERSION = "0.0.1";
 
@@ -97,15 +98,46 @@ sub cronjob_nightly {
 
     foreach my $transport_id ( $self->_get_selected_transport_ids() ) {
         my $transport = Koha::File::Transports->find($transport_id);
+        if (!$transport) {
+            $self->{logger}->error("Transport with ID $transport_id not found, skipping");
+            next;
+        }
 
-        # FIXME: apply this check?
-        # if (!defined $transport->download_directory) {
-        #     $self->{logger}->error($transport->name . " does not have a download directory set and therefore could not be used.");
-        #     next;
-        # }
-        $transport->connect();
-        $transport->change_directory($transport->download_directory);
-        my $file_list = $transport->list_files();
+        my $transport_name = $transport->name || "Transport $transport_id";
+
+        # Check download directory is configured
+        if (!defined $transport->download_directory || $transport->download_directory eq '') {
+            $self->{logger}->error("Transport '$transport_name' does not have a download directory set, skipping");
+            next;
+        }
+
+        # Try to connect to transport
+        try {
+            $transport->connect();
+            $self->{logger}->info("Connected to transport '$transport_name'");
+        } catch {
+            $self->{logger}->error("Failed to connect to transport '$transport_name': $_");
+            next; # Skip this transport and continue with next
+        };
+
+        # Try to change to download directory
+        try {
+            $transport->change_directory($transport->download_directory);
+        } catch {
+            $self->{logger}->error("Failed to change to download directory for transport '$transport_name': $_");
+            next; # Skip this transport and continue with next
+        };
+
+        # Try to list files
+        my $file_list;
+        try {
+            $file_list = $transport->list_files();
+        } catch {
+            $self->{logger}->error("Failed to list files for transport '$transport_name': $_");
+            next; # Skip this transport and continue with next
+        };
+
+        next unless $file_list && @{$file_list};
 
         my $unique_id = 1;
         foreach my $filehash (@{$file_list}) {
@@ -117,8 +149,9 @@ sub cronjob_nightly {
             if (!$self->_was_modified_since_last_fetch( $filehash )) {
                 next;
             }
+
             my $localFile = Koha::UploadedFile->new({
-                hashvalue          => $unique_id, # subject to change
+                hashvalue          => $unique_id,
                 filename           => $filehash->{filename},
                 dir                => $self->{plugindir},
                 filesize           => $filehash->{a}->size,
@@ -128,12 +161,31 @@ sub cronjob_nightly {
                 permanent          => undef,
             });
             $unique_id += 1;
-            $transport->download_file($filehash->{filename}, $localFile->full_path());
+
+            # Try to download file
+            try {
+                $transport->download_file($filehash->{filename}, $localFile->full_path());
+                $self->{logger}->info("Downloaded file '$filename' from transport '$transport_name'");
+            } catch {
+                $self->{logger}->error("Failed to download file '$filename' from transport '$transport_name': $_");
+                next; # Skip this file and continue with next
+            };
 
             my @split_filename = split(/\./, $filename );
             my $profile_id = $self->_get_profile_id_by_filename($transport_id, $split_filename[0]);
 
-            $self->_stage($localFile->full_path(), $profile_id);
+            # Try to stage file
+            try {
+                $self->_stage($localFile->full_path(), $profile_id);
+                $self->{logger}->info("Successfully staged file '$filename' using profile ID $profile_id");
+            } catch {
+                $self->{logger}->error("Failed to stage file '$filename': $_");
+                # Clean up downloaded file on staging failure
+                if (-f $localFile->full_path()) {
+                    unlink($localFile->full_path());
+                }
+                next; # Continue with next file
+            };
         }
     }
 }
