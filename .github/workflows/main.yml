@@ -1,28 +1,129 @@
-name: Upload Release Asset
+name: CI
 
 on:
   push:
     branches:
       - main
     tags:
-      - 'v*'
+      - 'v*.*.*'
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
+  unit_tests:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        koha-version: [main, stable, oldstable]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Koha Version Branch Name
+        id: koha-version
+        uses: "bywatersolutions/github-action-koha-get-version-by-label@master"
+        with:
+          version-label: "${{ matrix.koha-version }}"
+
+      - name: Check out Koha
+        run: |
+          cd ..
+          git clone --branch ${{ steps.koha-version.outputs.current-branch-name }} --single-branch --depth 1 https://github.com/Koha-Community/Koha.git kohaclone
+
+      - name: Export additional variables needed by koha-testing-docker
+        run: |
+          cd ..
+          IFS='/' read -r -a parts <<< "$GITHUB_REPOSITORY"
+          export GITHUB_REPO="${parts[1]}"
+          export ROOT_DIR="$(pwd)"
+          export LOCAL_USER_ID="$(id -u)"
+          export SYNC_REPO="$ROOT_DIR/kohaclone"
+          export KOHA_INTRANET_URL="http://127.0.0.1:8081"
+          export KOHA_MARC_FLAVOUR="marc21"
+          echo "GITHUB_REPO=$GITHUB_REPO" >> $GITHUB_ENV
+          echo "ROOT_DIR=$ROOT_DIR" >> $GITHUB_ENV
+          echo "LOCAL_USER_ID=$LOCAL_USER_ID" >> $GITHUB_ENV
+          echo "SYNC_REPO=$SYNC_REPO" >> $GITHUB_ENV
+          echo "KOHA_INTRANET_URL=$KOHA_INTRANET_URL" >> $GITHUB_ENV
+          echo "KOHA_MARC_FLAVOUR=$KOHA_MARC_FLAVOUR" >> $GITHUB_ENV
+          echo "RUN_TESTS_AND_EXIT=no" >> $GITHUB_ENV
+          echo "KOHA_IMAGE=main" >> $GITHUB_ENV
+
+      - name: Set up koha-testing-docker
+        run: |
+          sudo sysctl -w vm.max_map_count=262144
+          wget -O docker-compose.yml https://gitlab.com/koha-community/koha-testing-docker/raw/main/docker-compose.yml
+          mkdir -p env
+          wget -O env/defaults.env https://gitlab.com/koha-community/koha-testing-docker/raw/main/env/defaults.env
+          cp env/defaults.env .env
+          docker compose pull
+
+      - name: Run tests
+        run: |
+          docker compose -f docker-compose.yml -p koha up --detach
+          cd ..
+          docker exec koha-koha-1 bash -c 'apt-get update && apt-get install -y cpanminus && cpanm JSON::MaybeXS Path::Tiny Test::Exception'
+          sleep 180
+          docker cp $GITHUB_REPO/. koha-koha-1:/var/lib/koha/kohadev/plugins
+          docker exec koha-koha-1 bash -c 'export KOHA_PLUGIN_DIR=/var/lib/koha/kohadev/plugins && prove /var/lib/koha/kohadev/plugins/t'
+
+      - name: Post test cleanup
+        run: |
+          docker compose down
+          docker volume prune -f
+          docker image prune -f
+          rm docker-compose.yml
+          rm -rf env .env
+
   release:
-    name: Create Release and upload .kpz file
+    needs: unit_tests
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
+      pull-requests: write
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Version
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get Koha Version Branch Name
+        id: koha-version-oldstable
+        uses: "bywatersolutions/github-action-koha-get-version-by-label@master"
+        with:
+          version-label: "oldstable"
+
+      - name: Read package.json
+        id: package
         run: |
-          VERSION=$(node checkVersionNumber.js version)
-          FILENAME=$(node checkVersionNumber.js filename)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "FILENAME=$FILENAME" >> $GITHUB_ENV
-      - name: 'Create Release'
-        run: gh release create ${{ env.VERSION }} ${{ env.FILENAME }} -t ${{ env.VERSION }} -n ""
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "plugin_path=$(jq -r '.plugin.pm_path' package.json)" >> $GITHUB_OUTPUT
+
+      - name: Build Koha Plugin kpz artifact
+        id: kpz
+        uses: "bywatersolutions/github-action-koha-plugin-create-kpz@master"
+        with:
+          release-version: ${{ github.ref_name }}
+          release-name: ${{ github.event.repository.name }}
+          minimum-version: ${{ steps.koha-version-oldstable.outputs.version-major-minor }}
+          plugin-module: ${{ steps.package.outputs.plugin_path }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ steps.kpz.outputs.filename }}
+            CHANGELOG.md
+          generate_release_notes: true

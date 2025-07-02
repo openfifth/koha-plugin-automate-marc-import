@@ -3,20 +3,24 @@ package Koha::Plugin::AutomateMarcImport;
 use Modern::Perl;
 
 use base qw(Koha::Plugins::Base);
-use Koha::File::Transports;
-use Koha::UploadedFile;
+
+# Core Perl modules
+use File::Basename qw(fileparse);
+use JSON qw( encode_json decode_json );
+use Scalar::Util qw(looks_like_number);
+use Try::Tiny qw(catch try);
+
+# Koha modules
 use C4::Context;
-use Koha::Logger;
-use Koha::ImportBatches;
 use C4::ImportBatch
     qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
 use C4::Matcher;
-use JSON qw( encode_json decode_json );
-use Koha::ImportBatchProfiles;
-use Scalar::Util qw(looks_like_number);
-use Try::Tiny qw(catch try);
-use File::Basename qw(fileparse);
 use Koha::Database;
+use Koha::File::Transports;
+use Koha::ImportBatches;
+use Koha::ImportBatchProfiles;
+use Koha::Logger;
+use Koha::UploadedFile;
 
 our $VERSION = "0.0.1";
 
