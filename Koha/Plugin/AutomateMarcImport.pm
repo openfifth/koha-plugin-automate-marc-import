@@ -470,31 +470,22 @@ sub _set_setting_id {
 
 sub _stage {
     my ( $self, $input_file_path, $profile_id) = @_;
-    my $profile = Koha::ImportBatchProfiles->search({ id => $profile_id });
+    my $profile = Koha::ImportBatchProfiles->find($profile_id);
 
-    # TODO: could we refactor this and assign the scalars directly?
-    my @batch_comment_arr        = $profile->get_column('comments');
-    my @record_type_arr          = $profile->get_column('record_type');
-    my @encoding_arr             = $profile->get_column('encoding');
-    my @format_arr               = $profile->get_column('format');
-    my @marc_mod_template_id_arr = $profile->get_column('template_id');
-    my @parse_items_arr          = $profile->get_column('parse_items');
-    my @matcher_id_arr           = $profile->get_column('matcher_id');
-    my @nomatch_action_arr       = $profile->get_column('nomatch_action');
-    my @overlay_action_arr       = $profile->get_column('overlay_action');
-    my @item_action_arr          = $profile->get_column('item_action');
+    unless ($profile) {
+        return;
+    }
 
-    my $batch_comment = $batch_comment_arr[0];
-    my $record_type = $record_type_arr[0];
-    my $encoding = $encoding_arr[0];
-    my $format = $format_arr[0];
-    my $marc_mod_template_id = $marc_mod_template_id_arr[0];
-    my $parse_items = $parse_items_arr[0];
-    my $matcher_id = $matcher_id_arr[0];
-    my $nomatch_action = $nomatch_action_arr[0];
-    my $overlay_action = $overlay_action_arr[0];
-    my $item_action = $item_action_arr[0];
-
+    my $batch_comment = $profile->comments;
+    my $record_type = $profile->record_type;
+    my $encoding = $profile->encoding;
+    my $format = $profile->format;
+    my $marc_mod_template_id = $profile->template_id;
+    my $parse_items = $profile->parse_items;
+    my $matcher_id = $profile->matcher_id;
+    my $nomatch_action = $profile->nomatch_action;
+    my $overlay_action = $profile->overlay_action;
+    my $item_action = $profile->item_action;
 
     if ( !$input_file_path ) {
         $self->{logger}->error("Cannot open input file $input_file_path: $!");
