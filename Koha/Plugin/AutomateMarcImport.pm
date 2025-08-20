@@ -63,17 +63,17 @@ sub configure {
             my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
             print $cgi->redirect($redirect_url);
             return;
-        } else {
-            # Display error message to user
-            $template->param(
-                error_message => $save_result->{error},
-                op => 'add_form',
-                # Pre-populate form with submitted values
-                selected_transport_id => $cgi->param('selected_transport_id'),
-                profile_id => $cgi->param('profile_id'),
-                filenames => $cgi->param('filenames'),
-            );
         }
+        $template->param(
+            error_message => $save_result->{error},
+            op => 'add_form',
+            # Pre-populate form with submitted values
+            selected_transport_id => $cgi->param('selected_transport_id'),
+            profile_id => $cgi->param('profile_id'),
+            filenames => $cgi->param('filenames'),
+        );
+        $self->output_html( $template->output() );
+        return;
     }
 
     if ( defined $cgi->param('op') && $cgi->param('op') eq 'delete') {
@@ -84,18 +84,15 @@ sub configure {
     }
 
     my @automate_marc_import_plugin_settings = $self->_get_settings_for_display();
-
     if ($cgi->param('op')) {
         $template->param(op => $cgi->param('op'))
     }
-
     $template->param(
         available_profiles => Koha::ImportBatchProfiles->search(),
         available_transport => Koha::File::Transports->search(),
         automate_marc_import_plugin_settings => \@automate_marc_import_plugin_settings,
         automate_marc_import_plugin_settings_count => scalar @automate_marc_import_plugin_settings
     );
-
     $self->output_html( $template->output() );
 }
 
