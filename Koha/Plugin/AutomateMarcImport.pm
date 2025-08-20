@@ -473,7 +473,7 @@ sub _stage {
     my $profile = Koha::ImportBatchProfiles->find($profile_id);
 
     unless ($profile) {
-        return;
+        die "Profile with id $profile_id not found";
     }
 
     my $batch_comment = $profile->comments;
