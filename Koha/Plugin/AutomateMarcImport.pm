@@ -57,13 +57,16 @@ sub configure {
 
     my $template = $self->get_template( { file => 'configure.tt' } );
 
+    # save setting OR
     if ( defined $cgi->param('op') && $cgi->param('op') eq 'save') {
         my $save_result = $self->_save_setting( $cgi );
+        # handle successful setting creation OR
         if ($save_result->{success}) {
             my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
             print $cgi->redirect($redirect_url);
             return;
         }
+        # ..handle unsuccessful setting creation - display error message to user
         $template->param(
             error_message => $save_result->{error},
             op => 'add_form',
@@ -76,6 +79,7 @@ sub configure {
         return;
     }
 
+    # ..delete setting OR
     if ( defined $cgi->param('op') && $cgi->param('op') eq 'delete') {
         $self->_delete_setting( $cgi );
         my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
@@ -83,6 +87,7 @@ sub configure {
         return;
     }
 
+    # ..display settings list (default action)
     my @automate_marc_import_plugin_settings = $self->_get_settings_for_display();
     if ($cgi->param('op')) {
         $template->param(op => $cgi->param('op'))
