@@ -305,13 +305,13 @@ sub _get_settings_for_display {
 
     foreach my $setting ( split( /,/, $self->retrieve_data('selected_setting_ids')) ) {
         my $setting_data = decode_json($self->retrieve_data($setting));
-        my $transport = Koha::File::Transports->search({ id => $setting_data->{transport_id} });
+        my $transport = Koha::File::Transports->search({ file_transport_id => $setting_data->{transport_id} });
         my $profile = Koha::ImportBatchProfiles->search({ id => $setting_data->{profile_id} });
 
         # formats the data so it can be easily rendered in the settings table on the plugin's configuration page
         my %setting = (
             id => $setting_data->{id},
-            transport_id => $transport->get_column('id'),
+            transport_id => $transport->get_column('file_transport_id'),
             transport_name => $transport->get_column('name'),
             profile_name => $profile->get_column('name'),
             profile_comment => $profile->get_column('comments'),
