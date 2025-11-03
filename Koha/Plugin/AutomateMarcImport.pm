@@ -22,13 +22,13 @@ use Koha::ImportBatchProfiles;
 use Koha::Logger;
 use Koha::UploadedFile;
 
-our $VERSION = "0.0.1";
+our $VERSION = '1.0.0';
 
 our $metadata = {
     name            => 'Automate Marc Import',
     author          => 'Open Fifth',
     date_authored   => '2022-05-19',
-    date_updated    => '2022-05-19',
+    date_updated    => '2025-11-03',
     minimum_version => '24.11.00.000', #TODO: update this to relevant Koha version once knows (dependency not yet upstreamed)
     maximum_version => undef,
     version         => $VERSION,
@@ -606,7 +606,8 @@ sub _is_supported_marc_file {
 sub _was_modified_since_last_fetch {
     my ( $self, $filehash ) = @_;
     # FIXME: record and then retrieve the time when we last fetched from the transport instead?
-    my $last_run_time = time() - 86400;
+    # my $last_run_time = time() - 86400;
+    my $last_run_time = time() - 8640000;
     my $last_mod_time = defined $filehash->{a}->mtime ? $filehash->{a}->mtime : $filehash->{a}->atime;
     return ($last_mod_time > $last_run_time);
 }

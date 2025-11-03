@@ -4,7 +4,7 @@
     "pm_path": "Koha/Plugin/AutomateMarcImport.pm"
   },
   "name": "koha-plugin-automate-marc-import",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "previous_version": "0.0.1",
   "description": "A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites",
   "main": "index.js",
@@ -18,7 +18,14 @@
     "release:major": "node increment_version.js major | cat && git add . && git commit -m 'chore: bump version' && VERSION=$(node -p 'require(\"./package.json\").version') && git tag -a v$VERSION -m \"Release v$VERSION\" && git push origin main --follow-tags",
     "release": "bash ./release_kpz.sh"
   },
-  "keywords": ["koha", "plugin", "marc", "import", "sftp", "automation"],
+  "keywords": [
+    "koha",
+    "plugin",
+    "marc",
+    "import",
+    "sftp",
+    "automation"
+  ],
   "author": "Open Fifth",
   "license": "ISC"
 }
