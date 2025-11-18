@@ -154,6 +154,14 @@
                                 If this field is left empty, the selected profile will become the default for the selected transport.
                             </div>
                         </fieldset>
+                        <fieldset class="rows">
+                            <legend>Import options:</legend>
+                            <label for="auto_commit">Auto-commit: </label>
+                            <input type="checkbox" name="auto_commit" id="auto_commit" value="1"[% IF auto_commit %] checked="checked"[% END %] />
+                            <div class="hint">
+                                When enabled, records will be automatically imported (committed) after staging. When disabled, records will only be staged for review.
+                            </div>
+                        </fieldset>
                         <fieldset class="action">
                             <input type="hidden" name="op" value="save" />
                             <input type="submit" class="btn btn-primary" value="Save Setting" />
@@ -180,7 +188,8 @@
                                         <th>Transport name</th>
                                         <th>Filenames</th>
                                         <th>Profile name</th>
-                                        <th>Comments about this file</th> 
+                                        <th>Auto-commit</th>
+                                        <th>Comments about this file</th>
                                         <th>Record type</th>
                                         <th>Character encoding</th>
                                         <th>Format</th>
@@ -199,6 +208,7 @@
                                             <td id="transport_name_[% setting.id %]">[% setting.transport_name %]</td>
                                             <td id="filenames">[% setting.filenames %]</td>
                                             <td id="profile_name_[% setting.id %]">[% setting.profile_name %]</td>
+                                            <td id="auto_commit_[% setting.id %]">[% IF setting.auto_commit %]Yes[% ELSE %]No[% END %]</td>
                                             <td id="profile_comment_[% setting.id %]">[% setting.profile_comment %]</td>
                                             <td id="profile_record_type_[% setting.id %]">[% setting.profile_record_type %]</td>
                                             <td id="profile_character_encoding_[% setting.id %]">[% setting.profile_character_encoding %]</td>
