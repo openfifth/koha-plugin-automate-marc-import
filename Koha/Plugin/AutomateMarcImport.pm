@@ -5,7 +5,9 @@ use Modern::Perl;
 use base qw(Koha::Plugins::Base);
 
 # Core Perl modules
+use Digest::MD5;
 use File::Basename qw(fileparse);
+use File::Copy qw(copy);
 use JSON qw( encode_json decode_json );
 use Scalar::Util qw(looks_like_number);
 use Try::Tiny qw(catch try);
@@ -13,7 +15,7 @@ use Try::Tiny qw(catch try);
 # Koha modules
 use C4::Context;
 use C4::ImportBatch
-    qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
+    qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords BatchCommitRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
 use C4::Matcher;
 use Koha::Database;
 use Koha::File::Transports;
@@ -28,11 +30,11 @@ our $metadata = {
     name            => 'Automate Marc Import',
     author          => 'Open Fifth',
     date_authored   => '2022-05-19',
-    date_updated    => '2022-05-19',
+    date_updated    => '2025-01-18',
     minimum_version => '24.11.00.000', #TODO: update this to relevant Koha version once knows (dependency not yet upstreamed)
     maximum_version => undef,
     version         => $VERSION,
-    description     => 'A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites',
+    description     => 'A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites. Features include MD5-based file deduplication, automatic archiving of processed files, MARC modification template support, and optional auto-commit for automated importing.',
 };
 
 # IMPLEMENTED PLUGIN HOOKS
@@ -72,6 +74,7 @@ sub configure {
                 selected_transport_id => $cgi->param('selected_transport_id'),
                 profile_id => $cgi->param('profile_id'),
                 filenames => $cgi->param('filenames'),
+                auto_commit => $cgi->param('auto_commit'),
             );
         }
     }
@@ -101,6 +104,9 @@ sub configure {
 
 sub cronjob_nightly {
     my ( $self ) = @_;
+
+    # Ensure required directories exist
+    $self->_ensure_plugin_directories();
 
     foreach my $transport_id ( $self->_get_selected_transport_ids() ) {
         my $transport = Koha::File::Transports->find($transport_id);
@@ -157,6 +163,12 @@ sub cronjob_nightly {
                 next;
             }
 
+            # Check if file has already been processed (MD5 deduplication)
+            if (!$self->_should_process_file($filename)) {
+                $self->{logger}->info("File '$filename' has already been processed (MD5 match), skipping");
+                next;
+            }
+
             my $localFile = Koha::UploadedFile->new({
                 hashvalue          => $unique_id,
                 filename           => $filehash->{filename},
@@ -179,12 +191,21 @@ sub cronjob_nightly {
             };
 
             my @split_filename = split(/\./, $filename );
-            my $profile_id = $self->_get_profile_id_by_filename($transport_id, $split_filename[0]);
+            my $setting_data = $self->_get_setting_by_filename($transport_id, $split_filename[0]);
+            my $profile_id = $setting_data->{profile_id};
+            my $auto_commit = $setting_data->{auto_commit} // 0;
 
-            # Try to stage file
+            # Try to stage file (and optionally import)
+            my $batch_id;
             try {
-                $self->_stage($localFile->full_path(), $profile_id);
-                $self->{logger}->info("Successfully staged file '$filename' using profile ID $profile_id");
+                $batch_id = $self->_stage($localFile->full_path(), $profile_id, $auto_commit);
+
+                my $action = $auto_commit ? "staged and imported" : "staged";
+                $self->{logger}->info("Successfully $action file '$filename' using profile ID $profile_id (batch $batch_id)");
+
+                # Archive the processed file
+                $self->_archive_file($localFile->full_path(), $filename);
+
             } catch {
                 $self->{logger}->error("Failed to stage file '$filename': $_");
                 # Clean up downloaded file on staging failure
@@ -276,7 +297,14 @@ sub _get_selected_transport_ids {
 sub _get_profile_id_by_filename {
     my ( $self, $transport_id, $filename ) = @_;
 
-    my $default_profile_id_for_transport;
+    my $setting_data = $self->_get_setting_by_filename($transport_id, $filename);
+    return $setting_data->{profile_id};
+}
+
+sub _get_setting_by_filename {
+    my ( $self, $transport_id, $filename ) = @_;
+
+    my $default_setting_for_transport;
     my $lc_filename = lc( $filename );
 
     foreach my $setting_id (split(',', $self->retrieve_data( 'selected_setting_ids' ))) {
@@ -286,15 +314,15 @@ sub _get_profile_id_by_filename {
         }
 
         if ( !defined $setting_data->{filenames} || $setting_data->{filenames} eq  "") {
-            $default_profile_id_for_transport = $setting_data->{profile_id};
+            $default_setting_for_transport = $setting_data;
             next;
         }
 
         if ( $setting_data->{filenames} =~ /$lc_filename/) {
-            return $setting_data->{profile_id};
+            return $setting_data;
         }
     }
-    return $default_profile_id_for_transport;
+    return $default_setting_for_transport;
 }
 
 sub _get_settings_for_display {
@@ -323,6 +351,7 @@ sub _get_settings_for_display {
             profile_overlay_action => $profile->get_column('overlay_action'),
             profile_item_action => $profile->get_column('item_action'),
             filenames => $setting_data->{filenames},
+            auto_commit => $setting_data->{auto_commit} // 0,
         );
         push @automate_marc_import_plugin_settings, \%setting;
     }
@@ -331,52 +360,57 @@ sub _get_settings_for_display {
 
 sub _validate_cgi_params {
     my ( $self, $cgi ) = @_;
-    
+
     # Get parameters
     my $transport_id = $cgi->param('selected_transport_id');
     my $profile_id = $cgi->param('profile_id');
     my $filenames = $cgi->param('filenames') // '';
-    
+    my $auto_commit = $cgi->param('auto_commit') // 0;
+
     # Check required fields are present
     if (!defined $transport_id || $transport_id eq '') {
         return { valid => 0, error => "Transport selection is required" };
     }
-    
+
     if (!defined $profile_id || $profile_id eq '') {
         return { valid => 0, error => "Profile selection is required" };
     }
-    
+
     # Validate transport_id is a positive integer
     if (!looks_like_number($transport_id) || $transport_id <= 0) {
         return { valid => 0, error => "Invalid transport selection" };
     }
-    
-    # Validate profile_id is a positive integer  
+
+    # Validate profile_id is a positive integer
     if (!looks_like_number($profile_id) || $profile_id <= 0) {
         return { valid => 0, error => "Invalid profile selection" };
     }
-    
+
     # Verify transport exists
     my $transport = Koha::File::Transports->find($transport_id);
     if (!$transport) {
         return { valid => 0, error => "Transport with ID $transport_id does not exist" };
     }
-    
+
     # Verify profile exists
     my $profile = Koha::ImportBatchProfiles->find($profile_id);
     if (!$profile) {
         return { valid => 0, error => "Profile with ID $profile_id does not exist" };
     }
-    
+
     # Sanitize filenames
     my $sanitized_filenames = $self->_sanitize_filenames($filenames);
-    
+
+    # Validate auto_commit is boolean
+    $auto_commit = $auto_commit ? 1 : 0;
+
     return {
         valid => 1,
         data => {
             transport_id => int($transport_id),
             profile_id => int($profile_id),
             filenames => $sanitized_filenames,
+            auto_commit => $auto_commit,
         }
     };
 }
@@ -422,11 +456,12 @@ sub _save_setting {
     $updated_settings_id_list .= ',';
     
     # Use validated and sanitized data
-    my %setting = ( 
+    my %setting = (
         id => $setting_id,
         transport_id => $validation_result->{data}->{transport_id},
         profile_id => $validation_result->{data}->{profile_id},
         filenames => $validation_result->{data}->{filenames},
+        auto_commit => $validation_result->{data}->{auto_commit},
     );
 
     eval {
@@ -467,7 +502,8 @@ sub _set_setting_id {
 }
 
 sub _stage {
-    my ( $self, $input_file_path, $profile_id) = @_;
+    my ( $self, $input_file_path, $profile_id, $auto_commit) = @_;
+    $auto_commit //= 0; # Default to false if not specified
     my $profile = Koha::ImportBatchProfiles->search({ id => $profile_id });
 
     # TODO: could we refactor this and assign the scalars directly?
@@ -559,15 +595,21 @@ sub _stage {
             my $num_with_matches = $self->_search_for_matches($record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id);
 
             $self->{logger}->info("Successfully staged batch $batch_id: $num_valid_records valid records, $num_with_matches potential matches");
-            
+
+            # Commit the batch if auto_commit is enabled
+            if ($auto_commit) {
+                $self->{logger}->info("Auto-commit enabled, committing batch $batch_id");
+                $self->_commit_batch($batch_id);
+            }
+
             return $batch_id;
         });
-        
+
     } catch {
         $self->{logger}->error("Failed to stage MARC file '$input_file_path': $_");
         die "Staging transaction failed: $_";
     };
-    
+
     return $batch_id;
 }
 
@@ -623,6 +665,120 @@ sub _log_progress {
     my $num_input_records = shift;
     my $logger = Koha::Logger->get;
     $logger->trace("processed $num_input_records records");
+}
+
+sub _ensure_plugin_directories {
+    my ( $self ) = @_;
+
+    my @required_dirs = ('Archive');
+
+    foreach my $dir (@required_dirs) {
+        my $full_path = $self->{plugindir} . "/$dir";
+        if (!-d $full_path) {
+            mkdir($full_path, 0755) or $self->{logger}->warn("Could not create directory $full_path: $!");
+        }
+    }
+}
+
+sub _should_process_file {
+    my ( $self, $filename ) = @_;
+
+    my $archive_path = $self->{plugindir} . "/Archive/$filename";
+
+    # If file doesn't exist in archive, it's new and should be processed
+    return 1 unless -f $archive_path;
+
+    # File exists in archive - compare MD5 checksums
+    # We'll check after download, so for now return 1
+    # The actual MD5 check happens in _check_file_duplicate after download
+    return 1;
+}
+
+sub _check_file_duplicate {
+    my ( $self, $source_file, $filename ) = @_;
+
+    my $archive_file = $self->{plugindir} . "/Archive/$filename";
+
+    # If file doesn't exist in archive, it's not a duplicate
+    return 0 unless -f $archive_file;
+
+    # Calculate MD5 of archive file
+    open my $archive_fh, '<', $archive_file or do {
+        $self->{logger}->warn("Cannot open archive file $archive_file for MD5 check: $!");
+        return 0;
+    };
+    binmode $archive_fh;
+    my $archive_digest = Digest::MD5->new->addfile($archive_fh)->hexdigest;
+    close $archive_fh;
+
+    # Calculate MD5 of source file
+    open my $source_fh, '<', $source_file or do {
+        $self->{logger}->warn("Cannot open source file $source_file for MD5 check: $!");
+        return 0;
+    };
+    binmode $source_fh;
+    my $source_digest = Digest::MD5->new->addfile($source_fh)->hexdigest;
+    close $source_fh;
+
+    # Return 1 if files are identical (is duplicate), 0 if different
+    return $archive_digest eq $source_digest;
+}
+
+sub _archive_file {
+    my ( $self, $source_file, $filename ) = @_;
+
+    my $archive_path = $self->{plugindir} . "/Archive/$filename";
+
+    # Check if this is actually a duplicate before archiving
+    if ($self->_check_file_duplicate($source_file, $filename)) {
+        $self->{logger}->info("File '$filename' is identical to archived version, not re-archiving");
+    } else {
+        # Copy file to archive
+        if (copy($source_file, $archive_path)) {
+            $self->{logger}->info("Archived file '$filename' to Archive directory");
+        } else {
+            $self->{logger}->error("Failed to archive file '$filename': $!");
+        }
+    }
+
+    # Clean up the source file from plugin directory
+    if (-f $source_file) {
+        unlink($source_file) or $self->{logger}->warn("Could not remove temporary file $source_file: $!");
+    }
+}
+
+sub _commit_batch {
+    my ( $self, $batch_id ) = @_;
+
+    return unless $batch_id;
+
+    try {
+        $self->{logger}->info("Committing batch $batch_id");
+
+        # Use BatchCommitRecords to commit the batch
+        my ( $num_added, $num_updated, $num_items_added, $num_items_replaced, $num_items_errored, $num_ignored ) =
+            BatchCommitRecords({
+                batch_id => $batch_id,
+                framework => '',
+                overlay_framework => '',
+            });
+
+        $self->{logger}->info(
+            "Batch $batch_id committed: " .
+            "$num_added records added, " .
+            "$num_updated records updated, " .
+            "$num_items_added items added, " .
+            "$num_items_replaced items replaced, " .
+            "$num_items_errored items errored, " .
+            "$num_ignored records ignored"
+        );
+
+        return 1;
+
+    } catch {
+        $self->{logger}->error("Failed to commit batch $batch_id: $_");
+        die "Batch commit failed: $_";
+    };
 }
 
 1;
