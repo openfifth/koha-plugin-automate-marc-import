@@ -248,39 +248,45 @@
         [% Asset.js("js/admin-menu.js") | $raw %]
         [% Asset.js("lib/jquery/plugins/jquery.validate.min.js") | $raw %]
         <script>
-            // TODO: refactor
             $(document).ready(function(){
-                if (!window.location.href.includes('plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=add_form')) {
+                const isAddForm = window.location.href.includes('op=add_form');
+                const isEditForm = window.location.href.includes('op=edit_form') || window.location.href.includes('op=edit');
+                if (!isAddForm && !isEditForm) {
                     return;
                 }
+
+                function displayProfileDetails(profile) {
+                    if (!profile) return;
+                    document.getElementById('name').textContent = profile.name || '';
+                    document.getElementById('comment').textContent = profile.comments || '';
+                    document.getElementById('item_action').textContent = profile.item_action || '';
+                    document.getElementById('record_type').textContent = profile.record_type || '';
+                    document.getElementById('encoding').textContent = profile.encoding || '';
+                    document.getElementById('format').textContent = profile.format || '';
+                    document.getElementById('parse_items').textContent = profile.parse_items || '';
+                    document.getElementById('template').textContent = profile.template_id || '';
+                    document.getElementById('matcher').textContent = profile.matcher_id || '';
+                    document.getElementById('overlay_action').textContent = profile.overlay_action || '';
+                    document.getElementById('nomatch_action').textContent = profile.nomatch_action || '';
+                }
+
                 getProfiles().then((profiles) => {
-                    document.getElementById('name').textContent = profiles[0].name
-                    document.getElementById('comment').textContent = profiles[0].comments
-                    document.getElementById('item_action').textContent = profiles[0].item_action
-                    document.getElementById('record_type').textContent = profiles[0].record_type
-                    document.getElementById('encoding').textContent = profiles[0].encoding
-                    document.getElementById('format').textContent = profiles[0].format
-                    document.getElementById('parse_items').textContent = profiles[0].parse_items
-                    document.getElementById('template').textContent = profiles[0].template_id                   
-                    document.getElementById('matcher').textContent = profiles[0].matcher_id
-                    document.getElementById('overlay_action').textContent = profiles[0].overlay_action
-                    document.getElementById('nomatch_action').textContent = profiles[0].nomatch_action
-                    document.getElementById('item_action').textContent = profiles[0].item_action
-                    
-                    document.getElementById('profile_id').addEventListener('change', (e) => {
-                        document.getElementById('name').textContent = profiles[e.target.value - 1].name
-                        document.getElementById('comment').textContent = profiles[e.target.value - 1].comments
-                        document.getElementById('item_action').textContent = profiles[e.target.value - 1].item_action
-                        document.getElementById('record_type').textContent = profiles[e.target.value - 1].record_type
-                        document.getElementById('encoding').textContent = profiles[e.target.value - 1].encoding
-                        document.getElementById('format').textContent = profiles[e.target.value - 1].format
-                        document.getElementById('parse_items').textContent = profiles[e.target.value - 1].parse_items
-                        document.getElementById('template').textContent = profiles[e.target.value - 1].template_id                   
-                        document.getElementById('matcher').textContent = profiles[e.target.value - 1].matcher_id
-                        document.getElementById('overlay_action').textContent = profiles[e.target.value - 1].overlay_action
-                        document.getElementById('nomatch_action').textContent = profiles[e.target.value - 1].nomatch_action
-                        document.getElementById('item_action').textContent = profiles[e.target.value - 1].item_action
-                    })
+                    const profileSelect = document.getElementById('profile_id');
+                    const selectedProfileId = profileSelect.value;
+
+                    // Display initial profile details (either first profile or pre-selected one for edit)
+                    if (selectedProfileId) {
+                        const selectedProfile = profiles.find(p => p.id == selectedProfileId);
+                        displayProfileDetails(selectedProfile);
+                    } else if (profiles.length > 0) {
+                        displayProfileDetails(profiles[0]);
+                    }
+
+                    // Update profile details when selection changes
+                    profileSelect.addEventListener('change', (e) => {
+                        const profile = profiles.find(p => p.id == e.target.value);
+                        displayProfileDetails(profile);
+                    });
                 });
             })
 

@@ -119,6 +119,8 @@ sub configure {
             profile_id => $setting_data->{profile_id},
             filenames => $setting_data->{filenames},
             auto_commit => $setting_data->{auto_commit},
+            available_profiles => Koha::ImportBatchProfiles->search(),
+            available_transport => Koha::File::Transports->search(),
         );
         $self->output_html( $template->output() );
         return;
