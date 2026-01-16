@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Dynamic column name detection for Koha version compatibility
 - Automatic adaptation to different file transport table schemas (id/file_transport_id)
+- Edit functionality for existing configuration settings
 
 ## [0.0.1] - 2025-07-02
 

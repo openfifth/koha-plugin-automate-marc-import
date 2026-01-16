@@ -33,8 +33,8 @@
     <div class="row">
         <div class="col-md-10 order-md-2 order-sm-1">
             <main>
-                [% IF op == 'add_form' %]
-                    <h1>New Automated MARC Import Setting</h1>
+                 [% IF op == 'add_form' || op == 'edit_form' %]
+                     <h1>[% IF op == 'edit_form' %]Edit[% ELSE %]New[% END %] Automated MARC Import Setting</h1>
                     [% IF error_message %]
                         <div class="alert alert-danger">
                             <strong>Error:</strong> [% error_message | html %]
@@ -162,11 +162,16 @@
                                 When enabled, records will be automatically imported (committed) after staging. When disabled, records will only be staged for review.
                             </div>
                         </fieldset>
-                        <fieldset class="action">
-                            <input type="hidden" name="op" value="save" />
-                            <input type="submit" class="btn btn-primary" value="Save Setting" />
-                            <a class="cancel" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]">Cancel</a> 
-                        </fieldset>
+                         <fieldset class="action">
+                             <input type="hidden" name="op" value="save" />
+                             [% IF op == 'edit_form' %]
+                             <input type="hidden" name="selected_setting_id" value="[% selected_setting_id %]" />
+                             <input type="submit" class="btn btn-primary" value="Update Setting" />
+                             [% ELSE %]
+                             <input type="submit" class="btn btn-primary" value="Save Setting" />
+                             [% END %]
+                             <a class="cancel" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]">Cancel</a>
+                         </fieldset>
                     </form>
                 [% ELSE %]
                     <div id="toolbar" class="btn-toolbar">
@@ -219,9 +224,10 @@
                                             <td id="profile_nomatch_action_[% setting.id %]">[% setting.profile_nomatch_action %]</td>
                                             <td id="profile_overlay_action_[% setting.id %]">[% setting.profile_overlay_action %]</td>
                                             <td id="profile_item_action_[% setting.id %]">[% setting.profile_item_action %]</td>
-                                            <td data-class-name="actions noExport">
-                                                <a class="btn btn-default btn-xs delete_server" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=delete&selected_setting_id=[% setting.id %]"><i class="fa fa-trash-can" aria-hidden="true"></i>Delete</a>
-                                            </td>
+                                             <td data-class-name="actions noExport">
+                                                 <a class="btn btn-default btn-xs" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=edit&selected_setting_id=[% setting.id %]"><i class="fa fa-pencil" aria-hidden="true"></i>Edit</a>
+                                                 <a class="btn btn-default btn-xs delete_server" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=delete&selected_setting_id=[% setting.id %]"><i class="fa fa-trash-can" aria-hidden="true"></i>Delete</a>
+                                             </td>
                                         </tr>
                                     [% END %]
                                 </body>

@@ -70,9 +70,12 @@ sub configure {
             return;
         } else {
             # Display error message to user
+            my $selected_setting_id = $cgi->param('selected_setting_id');
+            my $op = defined $selected_setting_id && $selected_setting_id ne '' ? 'edit_form' : 'add_form';
             $template->param(
                 error_message => $save_result->{error},
-                op => 'add_form',
+                op => $op,
+                selected_setting_id => $selected_setting_id,
                 # Pre-populate form with submitted values
                 selected_transport_id => $cgi->param('selected_transport_id'),
                 profile_id => $cgi->param('profile_id'),
@@ -81,9 +84,12 @@ sub configure {
             );
         }
         # ..handle unsuccessful setting creation - display error message to user
+        my $selected_setting_id = $cgi->param('selected_setting_id');
+        my $op = defined $selected_setting_id && $selected_setting_id ne '' ? 'edit_form' : 'add_form';
         $template->param(
             error_message => $save_result->{error},
-            op => 'add_form',
+            op => $op,
+            selected_setting_id => $selected_setting_id,
             # Pre-populate form with submitted values
             selected_transport_id => $cgi->param('selected_transport_id'),
             profile_id => $cgi->param('profile_id'),
@@ -98,6 +104,23 @@ sub configure {
         $self->_delete_setting( $cgi );
         my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
         print $cgi->redirect($redirect_url);
+        return;
+    }
+
+    # ..edit setting OR
+    if ( defined $cgi->param('op') && $cgi->param('op') eq 'edit') {
+        my $selected_setting_id = $cgi->param('selected_setting_id');
+        my $setting_data = decode_json($self->retrieve_data( $selected_setting_id ));
+
+        $template->param(
+            op => 'edit_form',
+            selected_setting_id => $selected_setting_id,
+            selected_transport_id => $setting_data->{transport_id},
+            profile_id => $setting_data->{profile_id},
+            filenames => $setting_data->{filenames},
+            auto_commit => $setting_data->{auto_commit},
+        );
+        $self->output_html( $template->output() );
         return;
     }
 
@@ -460,14 +483,26 @@ sub _save_setting {
         return { success => 0, error => $validation_result->{error} };
     }
 
-    my $setting_id_list = $self->retrieve_data('selected_setting_ids') ? $self->retrieve_data('selected_setting_ids') : "";
-    my $setting_id = $self->_set_setting_id();
+    my $selected_setting_id = $cgi->param('selected_setting_id');
+    my $is_edit = defined $selected_setting_id && $selected_setting_id ne '';
 
-    # add the new setting's id to the selected_setting_ids list so the setting may be easily retrieved later
-    my $updated_settings_id_list = $setting_id_list;
-    $updated_settings_id_list .=  "$setting_id",
-    $updated_settings_id_list .= ',';
-    
+    my $setting_id_list = $self->retrieve_data('selected_setting_ids') ? $self->retrieve_data('selected_setting_ids') : "";
+    my $setting_id;
+
+    if ($is_edit) {
+        # Use existing setting ID for edits
+        $setting_id = $selected_setting_id;
+    } else {
+        # Generate new setting ID for new settings
+        $setting_id = $self->_set_setting_id();
+
+        # add the new setting's id to the selected_setting_ids list so the setting may be easily retrieved later
+        my $updated_settings_id_list = $setting_id_list;
+        $updated_settings_id_list .=  "$setting_id",
+        $updated_settings_id_list .= ',';
+        $setting_id_list = $updated_settings_id_list;
+    }
+
     # Use validated and sanitized data
     my %setting = (
         id => $setting_id,
@@ -478,11 +513,17 @@ sub _save_setting {
     );
 
     eval {
-        $self->store_data({
-            selected_setting_ids => $updated_settings_id_list,
+        my $data_to_store = {
             $setting_id => encode_json(\%setting),
-            last_setting_id => $setting_id,
-        });
+        };
+
+        # Only update selected_setting_ids and last_setting_id for new settings
+        if (!$is_edit) {
+            $data_to_store->{selected_setting_ids} = $setting_id_list;
+            $data_to_store->{last_setting_id} = $setting_id;
+        }
+
+        $self->store_data($data_to_store);
     };
     
     if ($@) {
