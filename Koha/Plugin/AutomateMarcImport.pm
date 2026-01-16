@@ -514,20 +514,16 @@ sub _detect_transport_column_name {
 
     # Try to detect the actual column name used in this Koha installation
     eval {
-        my $transport_rs = Koha::File::Transports->search();
-        my $transport = $transport_rs->next;
-        if ($transport) {
-            # Check if the result class has the file_transport_id column
-            my @columns = $transport->result_source->columns;
-            if (grep { $_ eq 'id' } @columns) {
-                # Older version uses 'id' as primary key
-                $self->{transport_column_name} = 'id';
-            } elsif (grep { $_ eq 'transport_id' } @columns) {
-                # Backported version might use 'transport_id'
-                $self->{transport_column_name} = 'transport_id';
-            }
-            # Otherwise keep the default 'file_transport_id'
+        # Check if the result class has the file_transport_id column
+        my @columns = Koha::File::Transports->columns;
+        if (grep { $_ eq 'id' } @columns) {
+            # Older version uses 'id' as primary key
+            $self->{transport_column_name} = 'id';
+        } elsif (grep { $_ eq 'transport_id' } @columns) {
+            # Backported version might use 'transport_id'
+            $self->{transport_column_name} = 'transport_id';
         }
+        # Otherwise keep the default 'file_transport_id'
     };
 
     if ($@) {
