@@ -21,7 +21,7 @@
             <a href="/cgi-bin/koha/plugins/plugins-home.pl?method=report">Plugins</a>
         [% END %]
         [% WRAPPER breadcrumb_item %]
-            <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS | uri %]&method=report">Automate MARC Import Setting</a>
+            <span>Automate MARC Import Setting</span>
         [% END %]
         [% WRAPPER breadcrumb_item bc_active= 1 %]
             <span>Configuration</span>
