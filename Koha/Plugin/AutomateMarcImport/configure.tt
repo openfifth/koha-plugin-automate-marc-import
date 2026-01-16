@@ -271,21 +271,23 @@
                 }
 
                 getProfiles().then((profiles) => {
+                    // Build a lookup map keyed by ID (as string) for reliable matching
+                    const profilesById = {};
+                    profiles.forEach(p => { profilesById[String(p.id)] = p; });
+
                     const profileSelect = document.getElementById('profile_id');
                     const selectedProfileId = profileSelect.value;
 
                     // Display initial profile details (either first profile or pre-selected one for edit)
                     if (selectedProfileId) {
-                        const selectedProfile = profiles.find(p => p.id == selectedProfileId);
-                        displayProfileDetails(selectedProfile);
+                        displayProfileDetails(profilesById[selectedProfileId]);
                     } else if (profiles.length > 0) {
                         displayProfileDetails(profiles[0]);
                     }
 
                     // Update profile details when selection changes
                     profileSelect.addEventListener('change', (e) => {
-                        const profile = profiles.find(p => p.id == e.target.value);
-                        displayProfileDetails(profile);
+                        displayProfileDetails(profilesById[e.target.value]);
                     });
                 });
             })
