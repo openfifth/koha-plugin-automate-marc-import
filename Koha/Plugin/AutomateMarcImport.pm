@@ -49,6 +49,7 @@ sub new {
     $self->{cgi} = CGI->new();
     $self->{logger} = Koha::Logger->get;
     $self->_set_plugin_dir();
+    $self->_detect_transport_column_name();
 
     return $self;
 }
@@ -343,13 +344,13 @@ sub _get_settings_for_display {
 
     foreach my $setting ( split( /,/, $self->retrieve_data('selected_setting_ids')) ) {
         my $setting_data = decode_json($self->retrieve_data($setting));
-        my $transport = Koha::File::Transports->search({ file_transport_id => $setting_data->{transport_id} });
+        my $transport = Koha::File::Transports->search({ $self->{transport_column_name} => $setting_data->{transport_id} });
         my $profile = Koha::ImportBatchProfiles->search({ id => $setting_data->{profile_id} });
 
         # formats the data so it can be easily rendered in the settings table on the plugin's configuration page
         my %setting = (
             id => $setting_data->{id},
-            transport_id => $transport->get_column('file_transport_id'),
+            transport_id => $transport->get_column($self->{transport_column_name}),
             transport_name => $transport->get_column('name'),
             profile_name => $profile->get_column('name'),
             profile_comment => $profile->get_column('comments'),
@@ -503,6 +504,37 @@ sub _set_plugin_dir {
         $pluginsdir = $pluginsdir->[0];
     }
     $self->{plugindir} = $pluginsdir . "/Koha/Plugin/AutomateMarcImport";
+}
+
+sub _detect_transport_column_name {
+    my ( $self ) = @_;
+
+    # Default to file_transport_id (newer Koha versions)
+    $self->{transport_column_name} = 'file_transport_id';
+
+    # Try to detect the actual column name used in this Koha installation
+    eval {
+        my $transport_rs = Koha::File::Transports->search();
+        my $transport = $transport_rs->next;
+        if ($transport) {
+            # Check if the result class has the file_transport_id column
+            my @columns = $transport->result_source->columns;
+            if (grep { $_ eq 'id' } @columns) {
+                # Older version uses 'id' as primary key
+                $self->{transport_column_name} = 'id';
+            } elsif (grep { $_ eq 'transport_id' } @columns) {
+                # Backported version might use 'transport_id'
+                $self->{transport_column_name} = 'transport_id';
+            }
+            # Otherwise keep the default 'file_transport_id'
+        }
+    };
+
+    if ($@) {
+        $self->{logger}->warn("Failed to detect transport column name, using default 'file_transport_id': $@");
+    } else {
+        $self->{logger}->info("Detected transport column name: " . $self->{transport_column_name});
+    }
 }
 
 # generates a unique identifier to assign to newly created settings
