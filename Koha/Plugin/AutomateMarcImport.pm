@@ -24,13 +24,13 @@ use Koha::ImportBatchProfiles;
 use Koha::Logger;
 use Koha::UploadedFile;
 
-our $VERSION = '1.0.1';
+our $VERSION = '1.0.2';
 
 our $metadata = {
     name            => 'Automate Marc Import',
     author          => 'Open Fifth',
     date_authored   => '2022-05-19',
-    date_updated    => '2025-11-19',
+    date_updated    => '2026-01-16',
     minimum_version => '24.11.00.000', #TODO: update this to relevant Koha version once knows (dependency not yet upstreamed)
     maximum_version => undef,
     version         => $VERSION,
