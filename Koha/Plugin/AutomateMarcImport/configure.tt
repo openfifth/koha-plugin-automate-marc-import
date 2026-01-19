@@ -18,13 +18,22 @@
 [% WRAPPER 'sub-header.inc' %]
     [% WRAPPER breadcrumbs %]
         [% WRAPPER breadcrumb_item %]
-            <a href="/cgi-bin/koha/plugins/plugins-home.pl?method=report">Plugins</a>
+            <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a>
         [% END %]
         [% WRAPPER breadcrumb_item %]
             <span>Automate MARC Import Setting</span>
         [% END %]
-        [% WRAPPER breadcrumb_item bc_active= 1 %]
-            <span>Configuration</span>
+        [% IF op == 'add_form' || op == 'edit_form' %]
+            [% WRAPPER breadcrumb_item %]
+                <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=configure">Configuration</a>
+            [% END %]
+            [% WRAPPER breadcrumb_item bc_active = 1 %]
+                <span>Upsert</span>
+            [% END %]
+        [% ELSE %]
+            [% WRAPPER breadcrumb_item bc_active= 1 %]
+                <span>Configuration</span>
+            [% END %]
         [% END %]
     [% END #/ WRAPPER breadcrumbs %]
 [% END #/ WRAPPER sub-header.inc %]
