@@ -695,6 +695,12 @@ sub _stage {
                 die "Failed to create import batch";
             }
 
+            # Associate the import profile with the batch
+            if ($profile_id) {
+                my $ibatch = Koha::ImportBatches->find($batch_id);
+                $ibatch->set({ profile_id => $profile_id })->store;
+            }
+
             # Set up record matching and overlay actions
             my $num_with_matches = $self->_search_for_matches($record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id);
 
