@@ -269,7 +269,7 @@ sub intranet_js {
         return;
     }
 
-    my $num_import_batches = Koha::ImportBatches->search({ import_status => 'staged' })->count;
+    my $num_import_batches = Koha::ImportBatches->search({ import_status => 'staged', batch_type => 'batch' })->count;
     if ($num_import_batches == 0) {
         return;
     }
