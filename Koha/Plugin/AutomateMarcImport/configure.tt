@@ -28,7 +28,7 @@
                 <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=configure">Configuration</a>
             [% END %]
             [% WRAPPER breadcrumb_item bc_active = 1 %]
-                <span>Upsert</span>
+                <span>[% IF op == 'edit_form' %]Edit setting[% ELSE %]Add setting[% END %]</span>
             [% END %]
         [% ELSE %]
             [% WRAPPER breadcrumb_item bc_active= 1 %]
@@ -65,15 +65,16 @@
                             [% END %]
                             <span class="required">Required</span>
                             <div class="alert alert-info">
+                                <p><strong>What is a transport?</strong> A transport defines the connection details for a remote server where your MARC files are stored (e.g., a vendor's FTP or SFTP server).</p>
                                 [% IF available_transport.count %]
-                                Cannot find the (S)FTP server you are looking for? Consider <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">adding</a> one.
+                                <p>Can't find the server you need? <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">Add a new transport</a>.</p>
                                 [% ELSE %]
-                                No (S)FTP servers found, would you like to <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">add</a> one?
+                                <p>No transports have been configured yet. <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">Add your first transport</a> to get started.</p>
                                 [% END %]
                             </div>
                         </fieldset>
                         <fieldset class="rows">
-                            <legend>Profile</legend>
+                            <legend>Import profile</legend>
                             <div class="row">
                                 <div class="col-sm-6">
                                     <label for="profile_id" class="required">Profile name: </label>
@@ -84,8 +85,7 @@
                                         [% END %]
                                     </select>
                                     <span class="required">Required</span>
-                                    <div class="hint">When you select a profile it pre-fills your form with profile values.</div>
-                                    <div class="hint">Later you can modify your form and that's what matters on import.</div>
+                                    <div class="hint">Select a profile to see its import settings on the right.</div>
                                 </div>
                                 <div class="col-sm-6" id="profile_details_wrapper">
                                     <table style="margin:0" id="profile_details_table">
@@ -118,7 +118,7 @@
                                                 <td id="parse_items" class="profile_details_value"></td>
                                             </tr>
                                             <tr>
-                                                <td id="profile_details_header_marc_modification_template_id">Template:</td>
+                                                <td id="profile_details_header_marc_modification_template_id">MARC modification template:</td>
                                                 <td id="template" class="profile_details_value"></td>
                                             </tr>
                                             <tr>
@@ -142,33 +142,37 @@
                                 </div>
                             </div>
                             <div class="alert alert-info">
+                                <p><strong>What is an import profile?</strong> An import profile defines how MARC records should be processed: character encoding, record matching rules, and what to do with matching or non-matching records.</p>
                                 [% IF available_profiles.count %]
-                                Cannot find the batch import profile you are looking for? Consider <a href="/cgi-bin/koha/tools/stage-marc-import.pl">adding</a> one.
+                                <p>Can't find the profile you need? Create one by going to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">Stage MARC records for import</a> and saving a new profile.</p>
                                 [% ELSE %]
-                                No batch import profiles found, would you like to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">add</a> one?
+                                <p>No import profiles exist yet. Create one by going to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">Stage MARC records for import</a> and saving a profile.</p>
                                 [% END %]
                             </div>
                         </fieldset>
                         <fieldset class="rows">
-                            <legend>This configuration applies to:</legend>
-                            <label for="filenames">Filenames: </label>
+                            <legend>File matching</legend>
+                            <label for="filenames">Filename patterns (one per line): </label>
                             <textarea name="filenames">[% filenames | html %]</textarea>
                             <div class="hint">
-                                Please list the names of specific MARC files found in the selected transport that you would like this setting to apply to.
+                                Enter text patterns to match filenames from this server. For example, entering "dispatch" will match files like "dispatch1234.mrc" or "dispatch_weekly.mrc".
                             </div>
                             <div class="hint">
-                                You do not need to include file extensions. This list is not case-sensitive.
+                                Matching is case-insensitive. You don't need to include file extensions.
                             </div>
                             <div class="alert alert-info">
-                                If this field is left empty, the selected profile will become the default for the selected transport.
+                                <p><strong>Tip:</strong> Leave this field empty to make this profile the default for all files from this server that don't match any other setting.</p>
                             </div>
                         </fieldset>
                         <fieldset class="rows">
-                            <legend>Import options:</legend>
-                            <label for="auto_commit">Auto-commit: </label>
+                            <legend>Import options</legend>
+                            <label for="auto_commit">Auto-commit records: </label>
                             <input type="checkbox" name="auto_commit" id="auto_commit" value="1"[% IF auto_commit %] checked="checked"[% END %] />
                             <div class="hint">
-                                When enabled, records will be automatically imported (committed) after staging. When disabled, records will only be staged for review.
+                                When enabled, records are automatically added to your catalog after staging.
+                            </div>
+                            <div class="hint">
+                                When disabled, records are staged for manual review before importing.
                             </div>
                         </fieldset>
                          <fieldset class="action">
@@ -199,51 +203,51 @@
                             <table id="automate_marc_import_setting">
                                 <thead>
                                     <tr>
-                                        <th>Transport name</th>
-                                        <th>Filenames</th>
-                                        <th>Profile name</th>
+                                        <th>Server</th>
+                                        <th>Filename patterns</th>
+                                        <th>Profile</th>
                                         <th>Auto-commit</th>
-                                        <th>Comments about this file</th>
+                                        <th>Comments</th>
                                         <th>Record type</th>
-                                        <th>Character encoding</th>
+                                        <th>Encoding</th>
                                         <th>Format</th>
                                         <th>Parse items</th>
-                                        <th>Template</th>
-                                        <th>Record matching rule</th>
-                                        <th>Action if matching record found</th>
-                                        <th>Action if no match is found</th>
-                                        <th>How to process items</th>
+                                        <th>MARC modification template</th>
+                                        <th>Matching rule</th>
+                                        <th>If match found</th>
+                                        <th>If no match</th>
+                                        <th>Item handling</th>
                                         <th data-class-name="actions noExport">Actions</th>
                                     </tr>
                                 </thead>
-                                <body>
+                                <tbody>
                                     [% FOREACH setting IN automate_marc_import_plugin_settings %]
                                         <tr>
                                             <td id="transport_name_[% setting.id %]">[% setting.transport_name %]</td>
-                                            <td id="filenames">[% setting.filenames %]</td>
+                                            <td id="filenames_[% setting.id %]">[% IF setting.filenames %][% setting.filenames | html | html_line_break %][% ELSE %]<em>(default)</em>[% END %]</td>
                                             <td id="profile_name_[% setting.id %]">[% setting.profile_name %]</td>
                                             <td id="auto_commit_[% setting.id %]">[% IF setting.auto_commit %]Yes[% ELSE %]No[% END %]</td>
                                             <td id="profile_comment_[% setting.id %]">[% setting.profile_comment %]</td>
                                             <td id="profile_record_type_[% setting.id %]">[% setting.profile_record_type %]</td>
                                             <td id="profile_character_encoding_[% setting.id %]">[% setting.profile_character_encoding %]</td>
                                             <td id="profile_format_[% setting.id %]">[% setting.profile_format %]</td>
-                                            <td id="profile_parse_items_[% setting.id %]">[% setting.profile_parse_items %]</td>
-                                            <td id="profile_marc_modification_template_id_[% setting.id %]">[% setting.profile_marc_modification_template_id %]</td>
-                                            <td id="profile_record_matching_rule_[% setting.id %]">[% setting.profile_record_matching_rule %]</td>
-                                            <td id="profile_nomatch_action_[% setting.id %]">[% setting.profile_nomatch_action %]</td>
-                                            <td id="profile_overlay_action_[% setting.id %]">[% setting.profile_overlay_action %]</td>
+                                            <td id="profile_parse_items_[% setting.id %]">[% IF setting.profile_parse_items %]Yes[% ELSE %]No[% END %]</td>
+                                            <td id="profile_marc_modification_template_[% setting.id %]">[% IF setting.profile_marc_modification_template_name %][% setting.profile_marc_modification_template_name %][% ELSE %]<em>(none)</em>[% END %]</td>
+                                            <td id="profile_record_matching_rule_[% setting.id %]">[% IF setting.profile_record_matching_rule_name %][% setting.profile_record_matching_rule_name %][% ELSE %]<em>(none)</em>[% END %]</td>
+                                            <td id="profile_nomatch_action_[% setting.id %]">[% setting.profile_overlay_action %]</td>
+                                            <td id="profile_overlay_action_[% setting.id %]">[% setting.profile_nomatch_action %]</td>
                                             <td id="profile_item_action_[% setting.id %]">[% setting.profile_item_action %]</td>
                                              <td data-class-name="actions noExport">
-                                                 <a class="btn btn-default btn-xs" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=edit&selected_setting_id=[% setting.id %]"><i class="fa fa-pencil" aria-hidden="true"></i>Edit</a>
-                                                 <a class="btn btn-default btn-xs delete_server" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=delete&selected_setting_id=[% setting.id %]"><i class="fa fa-trash-can" aria-hidden="true"></i>Delete</a>
+                                                 <a class="btn btn-default btn-xs" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=edit&selected_setting_id=[% setting.id %]"><i class="fa fa-pencil" aria-hidden="true"></i> Edit</a>
+                                                 <a class="btn btn-default btn-xs delete_server" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=delete&selected_setting_id=[% setting.id %]"><i class="fa fa-trash-can" aria-hidden="true"></i> Delete</a>
                                              </td>
                                         </tr>
                                     [% END %]
-                                </body>
+                                </tbody>
                             </table>
                         </div>
                         <div class="alert alert-info">
-                            Profiles with no filenames specified will be treated as default for the relevant transport, and apply to all MARC files retrieved from it.
+                            <p><strong>Note:</strong> Settings with no filename patterns act as the default for that server, applying to any files that don't match a more specific setting.</p>
                         </div>
                     [% END %]
                 [% END %]
@@ -269,62 +273,74 @@
                     $('.profile_details_value').text('');
                 }
 
-                function displayProfileDetails(profile) {
+                function displayProfileDetails(profile, templateNames, matcherNames) {
                     if (!profile) {
                         clearProfileDetails();
                         return;
                     }
                     $('#name').text(profile.name || '');
                     $('#comment').text(profile.comments || '');
-                    $('#item_action').text(profile.item_action || '');
+                    $('#item_action').text(profile.item_action || '(none)');
                     $('#record_type').text(profile.record_type || '');
                     $('#encoding').text(profile.encoding || '');
                     $('#format').text(profile.format || '');
-                    $('#parse_items').text(profile.parse_items || '');
-                    $('#template').text(profile.template_id || '');
-                    $('#matcher').text(profile.matcher_id || '');
-                    $('#overlay_action').text(profile.overlay_action || '');
-                    $('#nomatch_action').text(profile.nomatch_action || '');
+                    $('#parse_items').text(profile.parse_items ? 'Yes' : 'No');
+                    $('#template').text(profile.template_id ? (templateNames[profile.template_id] || '(unknown)') : '(none)');
+                    $('#matcher').text(profile.matcher_id ? (matcherNames[profile.matcher_id] || '(unknown)') : '(none)');
+                    $('#overlay_action').text(profile.overlay_action || '(none)');
+                    $('#nomatch_action').text(profile.nomatch_action || '(none)');
                 }
 
-                // Store profiles for the change handler
+                // Store data for the change handler
                 let profilesById = {};
+                let templateNames = {};
+                let matcherNames = {};
 
-                getProfiles().then((profiles) => {
-                    // Build a lookup map keyed by profile_id (as string) for reliable matching
+                // Fetch all required data in parallel
+                Promise.all([
+                    getProfiles(),
+                    getTemplates(),
+                    getMatchers()
+                ]).then(([profiles, templates, matchers]) => {
+                    // Build lookup maps
                     profiles.forEach(p => {
                         profilesById[String(p.profile_id)] = p;
+                    });
+                    templates.forEach(t => {
+                        templateNames[t.template_id] = t.name;
+                    });
+                    matchers.forEach(m => {
+                        matcherNames[m.matcher_id] = m.code;
                     });
 
                     const selectedProfileId = $('#profile_id').val();
 
                     // Only display profile details if one is already selected (edit form)
                     if (selectedProfileId) {
-                        displayProfileDetails(profilesById[selectedProfileId]);
+                        displayProfileDetails(profilesById[selectedProfileId], templateNames, matcherNames);
                     }
-                });
 
-                // Handle profile selection change using Select2 events
-                // Use setTimeout to ensure Select2 has finished initializing
-                setTimeout(function() {
-                    $('#profile_id').on('select2:select select2:clear change', function() {
-                        const selectedId = $(this).val();
-                        displayProfileDetails(selectedId ? profilesById[selectedId] : null);
-                    });
-                }, 0);
+                    // Handle profile selection change using Select2 events
+                    // Use setTimeout to ensure Select2 has finished initializing
+                    setTimeout(function() {
+                        $('#profile_id').on('select2:select select2:clear change', function() {
+                            const selectedId = $(this).val();
+                            displayProfileDetails(selectedId ? profilesById[selectedId] : null, templateNames, matcherNames);
+                        });
+                    }, 0);
+                });
             })
 
-            // borrowed from /koha-tmpl/intranet-tmpl/prog/en/modules/tools/stage-marc-import.tt
-            const getProfiles = (id) => {
-                const select = $("#profile");
-                $("option[value!='']", select).remove();
-                return new Promise(function(resolve, reject) {
-                    $.ajax("/api/v1/import_batch_profiles")
-                    .then(resolve, reject)
-                })
-                .then(function(profiles){
-                    return profiles
-                });
+            const getProfiles = () => {
+                return $.ajax("/api/v1/import_batch_profiles").then(profiles => profiles);
+            }
+
+            const getTemplates = () => {
+                return $.ajax("/api/v1/marc_modification_templates").then(templates => templates).catch(() => []);
+            }
+
+            const getMatchers = () => {
+                return $.ajax("/api/v1/record_matchers").then(matchers => matchers).catch(() => []);
             }
             
             // Add form validation using jQuery Validate (Koha standard)

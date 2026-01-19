@@ -16,6 +16,7 @@ use Try::Tiny qw(catch try);
 use C4::Context;
 use C4::ImportBatch
     qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords BatchCommitRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
+use C4::MarcModificationTemplates qw( GetModificationTemplates );
 use C4::Matcher;
 use Koha::Database;
 use Koha::File::Transports;
@@ -378,10 +379,26 @@ sub _get_settings_for_display {
     my ( $self ) = @_;
     my  @automate_marc_import_plugin_settings;
 
+    # Build lookup hashes for template and matcher names
+    my %template_names;
+    my @templates = GetModificationTemplates();
+    foreach my $tmpl (@templates) {
+        $template_names{$tmpl->{template_id}} = $tmpl->{name};
+    }
+
+    my %matcher_names;
+    my @matchers = C4::Matcher::GetMatcherList();
+    foreach my $m (@matchers) {
+        $matcher_names{$m->{matcher_id}} = $m->{code};
+    }
+
     foreach my $setting ( split( /,/, $self->retrieve_data('selected_setting_ids')) ) {
         my $setting_data = decode_json($self->retrieve_data($setting));
         my $transport = Koha::File::Transports->search({ $self->{transport_column_name} => $setting_data->{transport_id} });
         my $profile = Koha::ImportBatchProfiles->search({ id => $setting_data->{profile_id} });
+
+        my $template_id = $profile->get_column('template_id');
+        my $matcher_id = $profile->get_column('matcher_id');
 
         # formats the data so it can be easily rendered in the settings table on the plugin's configuration page
         my %setting = (
@@ -394,8 +411,10 @@ sub _get_settings_for_display {
             profile_character_encoding => $profile->get_column('encoding'),
             profile_format => $profile->get_column('format'),
             profile_parse_items => $profile->get_column('parse_items'),
-            profile_marc_modification_template_id => $profile->get_column('template_id'),
-            profile_record_matching_rule => $profile->get_column('matcher_id'),
+            profile_marc_modification_template_id => $template_id,
+            profile_marc_modification_template_name => $template_id ? ($template_names{$template_id} // '') : '',
+            profile_record_matching_rule => $matcher_id,
+            profile_record_matching_rule_name => $matcher_id ? ($matcher_names{$matcher_id} // '') : '',
             profile_nomatch_action => $profile->get_column('nomatch_action'),
             profile_overlay_action => $profile->get_column('overlay_action'),
             profile_item_action => $profile->get_column('item_action'),
