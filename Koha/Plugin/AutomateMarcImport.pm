@@ -207,6 +207,12 @@ sub cronjob_nightly {
                 next;
             }
 
+            # Check if file was already imported (database check)
+            if ($self->_was_already_imported($filename)) {
+                $self->{logger}->info("File '$filename' was already imported (found in import_batches), skipping");
+                next;
+            }
+
             my $localFile = Koha::UploadedFile->new({
                 hashvalue          => $unique_id,
                 filename           => $filehash->{filename},
@@ -733,6 +739,23 @@ sub _was_modified_since_last_fetch {
     my $last_run_time = time() - 8640000;
     my $last_mod_time = defined $filehash->{a}->mtime ? $filehash->{a}->mtime : $filehash->{a}->atime;
     return ($last_mod_time > $last_run_time);
+}
+
+sub _was_already_imported {
+    my ( $self, $filename ) = @_;
+
+    my $dbh = C4::Context->dbh;
+
+    # Check if file was imported in the last 6 months
+    my $sql = q|
+        SELECT COUNT(*) FROM import_batches
+        WHERE file_name = ?
+        AND upload_timestamp > DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
+    |;
+
+    my $count = $dbh->selectrow_array($sql, undef, $filename);
+
+    return $count > 0;
 }
 
 #FIXME: do we need a logger subroutine to pass to BatchStageMarcRecords? If not: remove, and update _stage()
