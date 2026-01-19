@@ -47,7 +47,7 @@
                             <input type="hidden" name="method" value="[% METHOD %]"/>
                             <label for="selected_transport_id" class="required">Transport name: </label>
                             [% IF available_transport.count %]
-                            <select name="selected_transport_id" id="selected_transport_id" class="required" required="required">
+                            <select name="selected_transport_id" id="selected_transport_id" class="select2 required" required="required">
                                 <option value="">-- Select a transport --</option>
                                 [% FOREACH transport IN available_transport %]
                                     <option value="[% transport.id %]"[% IF selected_transport_id == transport.id %] selected="selected"[% END %]>[% transport.name %]</option>
@@ -68,7 +68,7 @@
                             <div class="row">
                                 <div class="col-sm-6">
                                     <label for="profile_id" class="required">Profile name: </label>
-                                    <select name="profile_id" id="profile_id" class="required" required="required">
+                                    <select name="profile_id" id="profile_id" class="select2 required" required="required">
                                         <option value="">-- Select a profile --</option>
                                         [% FOREACH profile IN available_profiles %]
                                         <option value="[% profile.id %]"[% IF profile_id == profile.id %] selected="selected"[% END %]>[% profile.name %]</option>
@@ -247,6 +247,7 @@
     [% MACRO jsinclude BLOCK %]
         [% Asset.js("js/admin-menu.js") | $raw %]
         [% Asset.js("lib/jquery/plugins/jquery.validate.min.js") | $raw %]
+        [% INCLUDE 'select2.inc' %]
         <script>
             $(document).ready(function(){
                 const isAddForm = window.location.href.includes('op=add_form');
@@ -255,41 +256,53 @@
                     return;
                 }
 
-                function displayProfileDetails(profile) {
-                    if (!profile) return;
-                    document.getElementById('name').textContent = profile.name || '';
-                    document.getElementById('comment').textContent = profile.comments || '';
-                    document.getElementById('item_action').textContent = profile.item_action || '';
-                    document.getElementById('record_type').textContent = profile.record_type || '';
-                    document.getElementById('encoding').textContent = profile.encoding || '';
-                    document.getElementById('format').textContent = profile.format || '';
-                    document.getElementById('parse_items').textContent = profile.parse_items || '';
-                    document.getElementById('template').textContent = profile.template_id || '';
-                    document.getElementById('matcher').textContent = profile.matcher_id || '';
-                    document.getElementById('overlay_action').textContent = profile.overlay_action || '';
-                    document.getElementById('nomatch_action').textContent = profile.nomatch_action || '';
+                function clearProfileDetails() {
+                    $('.profile_details_value').text('');
                 }
 
+                function displayProfileDetails(profile) {
+                    if (!profile) {
+                        clearProfileDetails();
+                        return;
+                    }
+                    $('#name').text(profile.name || '');
+                    $('#comment').text(profile.comments || '');
+                    $('#item_action').text(profile.item_action || '');
+                    $('#record_type').text(profile.record_type || '');
+                    $('#encoding').text(profile.encoding || '');
+                    $('#format').text(profile.format || '');
+                    $('#parse_items').text(profile.parse_items || '');
+                    $('#template').text(profile.template_id || '');
+                    $('#matcher').text(profile.matcher_id || '');
+                    $('#overlay_action').text(profile.overlay_action || '');
+                    $('#nomatch_action').text(profile.nomatch_action || '');
+                }
+
+                // Store profiles for the change handler
+                let profilesById = {};
+
                 getProfiles().then((profiles) => {
-                    // Build a lookup map keyed by ID (as string) for reliable matching
-                    const profilesById = {};
-                    profiles.forEach(p => { profilesById[String(p.id)] = p; });
+                    // Build a lookup map keyed by profile_id (as string) for reliable matching
+                    profiles.forEach(p => {
+                        profilesById[String(p.profile_id)] = p;
+                    });
 
-                    const profileSelect = document.getElementById('profile_id');
-                    const selectedProfileId = profileSelect.value;
+                    const selectedProfileId = $('#profile_id').val();
 
-                    // Display initial profile details (either first profile or pre-selected one for edit)
+                    // Only display profile details if one is already selected (edit form)
                     if (selectedProfileId) {
                         displayProfileDetails(profilesById[selectedProfileId]);
-                    } else if (profiles.length > 0) {
-                        displayProfileDetails(profiles[0]);
                     }
-
-                    // Update profile details when selection changes
-                    profileSelect.addEventListener('change', (e) => {
-                        displayProfileDetails(profilesById[e.target.value]);
-                    });
                 });
+
+                // Handle profile selection change using Select2 events
+                // Use setTimeout to ensure Select2 has finished initializing
+                setTimeout(function() {
+                    $('#profile_id').on('select2:select select2:clear change', function() {
+                        const selectedId = $(this).val();
+                        displayProfileDetails(selectedId ? profilesById[selectedId] : null);
+                    });
+                }, 0);
             })
 
             // borrowed from /koha-tmpl/intranet-tmpl/prog/en/modules/tools/stage-marc-import.tt
