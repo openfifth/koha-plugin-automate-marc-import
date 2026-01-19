@@ -18,6 +18,7 @@ use C4::ImportBatch
     qw( RecordsFromISO2709File RecordsFromMARCXMLFile BatchStageMarcRecords BatchCommitRecords SetImportBatchMatcher SetImportBatchOverlayAction SetImportBatchNoMatchAction SetImportBatchItemAction BatchFindDuplicates GetAllImportBatches );
 use C4::MarcModificationTemplates qw( GetModificationTemplates );
 use C4::Matcher;
+use Koha::BiblioFrameworks;
 use Koha::Database;
 use Koha::File::Transports;
 use Koha::ImportBatches;
@@ -82,22 +83,15 @@ sub configure {
                 profile_id => $cgi->param('profile_id'),
                 filenames => $cgi->param('filenames'),
                 auto_commit => $cgi->param('auto_commit'),
+                framework => $cgi->param('framework'),
+                overlay_framework => $cgi->param('overlay_framework'),
+                available_profiles => Koha::ImportBatchProfiles->search(),
+                available_transport => Koha::File::Transports->search(),
+                available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
             );
+            $self->output_html( $template->output() );
+            return;
         }
-        # ..handle unsuccessful setting creation - display error message to user
-        my $selected_setting_id = $cgi->param('selected_setting_id');
-        my $op = defined $selected_setting_id && $selected_setting_id ne '' ? 'edit_form' : 'add_form';
-        $template->param(
-            error_message => $save_result->{error},
-            op => $op,
-            selected_setting_id => $selected_setting_id,
-            # Pre-populate form with submitted values
-            selected_transport_id => $cgi->param('selected_transport_id'),
-            profile_id => $cgi->param('profile_id'),
-            filenames => $cgi->param('filenames'),
-        );
-        $self->output_html( $template->output() );
-        return;
     }
 
     # ..delete setting OR
@@ -120,8 +114,11 @@ sub configure {
             profile_id => $setting_data->{profile_id},
             filenames => $setting_data->{filenames},
             auto_commit => $setting_data->{auto_commit},
+            framework => $setting_data->{framework},
+            overlay_framework => $setting_data->{overlay_framework},
             available_profiles => Koha::ImportBatchProfiles->search(),
             available_transport => Koha::File::Transports->search(),
+            available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
         );
         $self->output_html( $template->output() );
         return;
@@ -135,6 +132,7 @@ sub configure {
     $template->param(
         available_profiles => Koha::ImportBatchProfiles->search(),
         available_transport => Koha::File::Transports->search(),
+        available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
         automate_marc_import_plugin_settings => \@automate_marc_import_plugin_settings,
         automate_marc_import_plugin_settings_count => scalar @automate_marc_import_plugin_settings
     );
@@ -239,11 +237,13 @@ sub cronjob_nightly {
             my $setting_data = $self->_get_setting_by_filename($transport_id, $split_filename[0]);
             my $profile_id = $setting_data->{profile_id};
             my $auto_commit = $setting_data->{auto_commit} // 0;
+            my $framework = $setting_data->{framework} // '';
+            my $overlay_framework = $setting_data->{overlay_framework} // '';
 
             # Try to stage file (and optionally import)
             my $batch_id;
             try {
-                $batch_id = $self->_stage($localFile->full_path(), $filename, $profile_id, $auto_commit);
+                $batch_id = $self->_stage($localFile->full_path(), $filename, $profile_id, $auto_commit, $framework, $overlay_framework);
 
                 my $action = $auto_commit ? "staged and imported" : "staged";
                 $self->{logger}->info("Successfully $action file '$filename' using profile ID $profile_id (batch $batch_id)");
@@ -434,6 +434,8 @@ sub _validate_cgi_params {
     my $profile_id = $cgi->param('profile_id');
     my $filenames = $cgi->param('filenames') // '';
     my $auto_commit = $cgi->param('auto_commit') // 0;
+    my $framework = $cgi->param('framework') // '';
+    my $overlay_framework = $cgi->param('overlay_framework') // '';
 
     # Check required fields are present
     if (!defined $transport_id || $transport_id eq '') {
@@ -472,6 +474,16 @@ sub _validate_cgi_params {
     # Validate auto_commit is boolean
     $auto_commit = $auto_commit ? 1 : 0;
 
+    # Validate framework codes (optional, alphanumeric, max 10 chars)
+    if ($framework ne '' && $framework !~ /^[A-Za-z0-9]{1,10}$/) {
+        return { valid => 0, error => "Invalid framework code" };
+    }
+
+    # Validate overlay_framework (optional, alphanumeric or '_USE_ORIG_', max 10 chars)
+    if ($overlay_framework ne '' && $overlay_framework ne '_USE_ORIG_' && $overlay_framework !~ /^[A-Za-z0-9]{1,10}$/) {
+        return { valid => 0, error => "Invalid overlay framework code" };
+    }
+
     return {
         valid => 1,
         data => {
@@ -479,6 +491,8 @@ sub _validate_cgi_params {
             profile_id => int($profile_id),
             filenames => $sanitized_filenames,
             auto_commit => $auto_commit,
+            framework => $framework,
+            overlay_framework => $overlay_framework,
         }
     };
 }
@@ -542,6 +556,8 @@ sub _save_setting {
         profile_id => $validation_result->{data}->{profile_id},
         filenames => $validation_result->{data}->{filenames},
         auto_commit => $validation_result->{data}->{auto_commit},
+        framework => $validation_result->{data}->{framework},
+        overlay_framework => $validation_result->{data}->{overlay_framework},
     );
 
     eval {
@@ -615,8 +631,10 @@ sub _set_setting_id {
 }
 
 sub _stage {
-    my ( $self, $input_file_path, $display_filename, $profile_id, $auto_commit) = @_;
+    my ( $self, $input_file_path, $display_filename, $profile_id, $auto_commit, $framework, $overlay_framework) = @_;
     $auto_commit //= 0; # Default to false if not specified
+    $framework //= '';
+    $overlay_framework //= '';
     my $profile = Koha::ImportBatchProfiles->find($profile_id);
 
     if ( $profile_id && !$profile ) {
@@ -709,7 +727,7 @@ sub _stage {
             # Commit the batch if auto_commit is enabled
             if ($auto_commit) {
                 $self->{logger}->info("Auto-commit enabled, committing batch $batch_id");
-                $self->_commit_batch($batch_id);
+                $self->_commit_batch($batch_id, $framework, $overlay_framework);
             }
 
             return $batch_id;
@@ -876,19 +894,24 @@ sub _archive_file {
 }
 
 sub _commit_batch {
-    my ( $self, $batch_id ) = @_;
+    my ( $self, $batch_id, $framework, $overlay_framework ) = @_;
 
     return unless $batch_id;
 
+    $framework //= '';
+    # Convert '_USE_ORIG_' to undef (tells Koha to keep original framework)
+    $overlay_framework = undef if defined $overlay_framework && $overlay_framework eq '_USE_ORIG_';
+    $overlay_framework //= '';
+
     try {
-        $self->{logger}->info("Committing batch $batch_id");
+        $self->{logger}->info("Committing batch $batch_id with framework='$framework', overlay_framework='" . ($overlay_framework // '_USE_ORIG_') . "'");
 
         # Use BatchCommitRecords to commit the batch
         my ( $num_added, $num_updated, $num_items_added, $num_items_replaced, $num_items_errored, $num_ignored ) =
             BatchCommitRecords({
                 batch_id => $batch_id,
-                framework => '',
-                overlay_framework => '',
+                framework => $framework,
+                overlay_framework => $overlay_framework,
             });
 
         $self->{logger}->info(

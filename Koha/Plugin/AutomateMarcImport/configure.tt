@@ -166,14 +166,44 @@
                         </fieldset>
                         <fieldset class="rows">
                             <legend>Import options</legend>
-                            <label for="auto_commit">Auto-commit records: </label>
-                            <input type="checkbox" name="auto_commit" id="auto_commit" value="1"[% IF auto_commit %] checked="checked"[% END %] />
-                            <div class="hint">
-                                When enabled, records are automatically added to your catalog after staging.
-                            </div>
-                            <div class="hint">
-                                When disabled, records are staged for manual review before importing.
-                            </div>
+                            <ol>
+                                <li>
+                                    <label for="auto_commit">Auto-commit records: </label>
+                                    <input type="checkbox" name="auto_commit" id="auto_commit" value="1"[% IF auto_commit %] checked="checked"[% END %] />
+                                    <div class="hint">
+                                        When enabled, records are automatically added to your catalog after staging.
+                                    </div>
+                                    <div class="hint">
+                                        When disabled, records are staged for manual review before importing.
+                                    </div>
+                                </li>
+                            </ol>
+                            <fieldset id="framework_options" class="rows"[% UNLESS auto_commit %] style="display:none"[% END %]>
+                                <legend>Framework options (for auto-commit)</legend>
+                                <ol>
+                                    <li>
+                                        <label for="framework">New record framework:</label>
+                                        <select name="framework" id="framework">
+                                            <option value="">Default</option>
+                                            [% FOREACH fw IN available_frameworks %]
+                                                <option value="[% fw.frameworkcode | html %]"[% IF framework == fw.frameworkcode %] selected="selected"[% END %]>[% fw.frameworktext | html %]</option>
+                                            [% END %]
+                                        </select>
+                                        <div class="hint">New bibliographic records will use this framework</div>
+                                    </li>
+                                    <li>
+                                        <label for="overlay_framework">Replacement record framework:</label>
+                                        <select name="overlay_framework" id="overlay_framework">
+                                            <option value="_USE_ORIG_"[% IF overlay_framework == '_USE_ORIG_' || !overlay_framework %] selected="selected"[% END %]>Keep original framework</option>
+                                            <option value=""[% IF overlay_framework == '' && overlay_framework.defined %] selected="selected"[% END %]>Default</option>
+                                            [% FOREACH fw IN available_frameworks %]
+                                                <option value="[% fw.frameworkcode | html %]"[% IF overlay_framework == fw.frameworkcode %] selected="selected"[% END %]>[% fw.frameworktext | html %]</option>
+                                            [% END %]
+                                        </select>
+                                        <div class="hint">Replacement records will use this framework</div>
+                                    </li>
+                                </ol>
+                            </fieldset>
                         </fieldset>
                          <fieldset class="action">
                              <input type="hidden" name="op" value="save" />
@@ -328,6 +358,15 @@
                             displayProfileDetails(selectedId ? profilesById[selectedId] : null, templateNames, matcherNames);
                         });
                     }, 0);
+                });
+
+                // Toggle framework options visibility based on auto_commit checkbox
+                $('#auto_commit').on('change', function() {
+                    if ($(this).is(':checked')) {
+                        $('#framework_options').show();
+                    } else {
+                        $('#framework_options').hide();
+                    }
                 });
             })
 
