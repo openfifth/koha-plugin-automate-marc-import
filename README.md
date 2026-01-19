@@ -8,6 +8,7 @@ A Koha plugin to automate the import and staging of MARC files by enabling night
 - **Flexible File Matching**: Configure import rules based on filename patterns
 - **MD5 Deduplication**: Prevents reprocessing of identical files
 - **Auto-Commit Option**: Automatically commit staged records without manual review
+- **Framework Selection**: Configure bibliographic frameworks for new and replacement records when auto-committing
 - **Archive Management**: Automatic archiving of processed files
 - **MARC Modification Support**: Apply MARC modification templates during import
 - **Multi-Format Support**: Handles ISO2709 (.mrc, .mrcx) and MARCXML (.xml, .marcxml) files
@@ -79,6 +80,12 @@ Configure the plugin to connect transport servers with import profiles:
      - Examples: `daily_update`, `weekly_marc`, `vendor_export`, `ebooks`
      - Patterns are matched as substrings (case-insensitive)
    - **Auto-commit**: Enable to automatically commit staged records (bypass manual review)
+   - **Framework options** (when auto-commit is enabled):
+     - **New record framework**: Bibliographic framework to use for newly created records (default: Default framework)
+     - **Replacement record framework**: Framework to use when overlaying existing records
+       - "Keep original framework" preserves the existing record's framework
+       - "Default" uses the system default framework
+       - Or select a specific framework
 5. Save the setting
 6. Repeat for additional transport servers/profiles as needed
 
