@@ -362,8 +362,13 @@ sub _get_setting_by_filename {
             next;
         }
 
-        if ( $setting_data->{filenames} =~ /$lc_filename/) {
-            return $setting_data;
+        # Check if filename contains any of the line-delimited patterns
+        foreach my $pattern (split(/\r?\n/, $setting_data->{filenames})) {
+            $pattern =~ s/^\s+|\s+$//g;  # trim whitespace
+            next if $pattern eq '';
+            if ( index($lc_filename, lc($pattern)) != -1 ) {
+                return $setting_data;
+            }
         }
     }
     return $default_setting_for_transport;
