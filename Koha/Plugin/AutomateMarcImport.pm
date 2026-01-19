@@ -190,7 +190,6 @@ sub cronjob_nightly {
 
         next unless $file_list && @{$file_list};
 
-        my $unique_id = 1;
         foreach my $filehash (@{$file_list}) {
             my $filename = $filehash->{filename};
             
@@ -214,8 +213,10 @@ sub cronjob_nightly {
                 next;
             }
 
+            # Use MD5 hash of filename for unique local storage path
+            my $file_hashvalue = Digest::MD5::md5_hex($filehash->{filename});
             my $localFile = Koha::UploadedFile->new({
-                hashvalue          => $unique_id,
+                hashvalue          => $file_hashvalue,
                 filename           => $filehash->{filename},
                 dir                => $self->{plugindir},
                 filesize           => $filehash->{a}->size,
@@ -224,7 +225,6 @@ sub cronjob_nightly {
                 public             => undef,
                 permanent          => undef,
             });
-            $unique_id += 1;
 
             # Try to download file
             try {
@@ -243,7 +243,7 @@ sub cronjob_nightly {
             # Try to stage file (and optionally import)
             my $batch_id;
             try {
-                $batch_id = $self->_stage($localFile->full_path(), $profile_id, $auto_commit);
+                $batch_id = $self->_stage($localFile->full_path(), $filename, $profile_id, $auto_commit);
 
                 my $action = $auto_commit ? "staged and imported" : "staged";
                 $self->{logger}->info("Successfully $action file '$filename' using profile ID $profile_id (batch $batch_id)");
@@ -615,7 +615,7 @@ sub _set_setting_id {
 }
 
 sub _stage {
-    my ( $self, $input_file_path, $profile_id, $auto_commit) = @_;
+    my ( $self, $input_file_path, $display_filename, $profile_id, $auto_commit) = @_;
     $auto_commit //= 0; # Default to false if not specified
     my $profile = Koha::ImportBatchProfiles->find($profile_id);
 
@@ -675,7 +675,7 @@ sub _stage {
             # Stage MARC records in batch
             my ( $batch_id, $num_valid_records, $num_items, @import_errors ) = BatchStageMarcRecords(
                 $record_type,                        $encoding,
-                $marc_records,                       $input_file_path,
+                $marc_records,                       $display_filename,
                 $marc_mod_template_id,               $batch_comment,
                 '',                                  $parse_items,
                 0,                                   100,
