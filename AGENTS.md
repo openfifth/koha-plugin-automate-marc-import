@@ -55,7 +55,7 @@ The project does not currently have dedicated linting tools configured. However,
 
 **Check Perl syntax:**
 ```bash
-perl -c Koha/Plugin/AutomateMarcImport.pm
+perl -c Koha/Plugin/Com/OpenFifth/AutomateMarcImport.pm
 ```
 
 ## Code Style Guidelines
@@ -188,7 +188,7 @@ perl -c Koha/Plugin/AutomateMarcImport.pm
 - Keep related functionality together
 - Use clear, descriptive filenames
 - Follow existing directory structure:
-  - `Koha/Plugin/` - Main plugin code
+  - `Koha/Plugin/Com/OpenFifth/` - Main plugin code
   - `t/` - Test files
   - Root level - Configuration and build files
 

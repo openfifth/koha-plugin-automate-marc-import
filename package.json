@@ -1,7 +1,7 @@
 {
   "plugin": {
-    "module": "Koha::Plugin::AutomateMarcImport",
-    "pm_path": "Koha/Plugin/AutomateMarcImport.pm"
+    "module": "Koha::Plugin::Com::OpenFifth::AutomateMarcImport",
+    "pm_path": "Koha/Plugin/Com/OpenFifth/AutomateMarcImport.pm"
   },
   "name": "koha-plugin-automate-marc-import",
   "version": "1.0.16",

@@ -1,4 +1,4 @@
-package Koha::Plugin::AutomateMarcImport;
+package Koha::Plugin::Com::OpenFifth::AutomateMarcImport;
 
 use Modern::Perl;
 
@@ -592,7 +592,7 @@ sub _set_plugin_dir {
     if (ref($pluginsdir) eq 'ARRAY') {
         $pluginsdir = $pluginsdir->[0];
     }
-    $self->{plugindir} = $pluginsdir . "/Koha/Plugin/AutomateMarcImport";
+    $self->{plugindir} = $pluginsdir . "/Koha/Plugin/Com/OpenFifth/AutomateMarcImport";
 }
 
 sub _detect_transport_column_name {
