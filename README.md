@@ -69,10 +69,9 @@ Create or configure import batch profiles that define how MARC records are proce
 
 Configure the plugin to connect transport servers with import profiles:
 
-1. Go to **Administration > Plugins**
-2. Find "Automate MARC Import" and click "Actions > Configure"
-3. Click "Add new setting"
-4. Configure the automation rule:
+1. Go to **Tools > Automate MARC Import** (under Plugins section)
+2. Click "New Automate MARC Import Setting"
+3. Configure the automation rule:
    - **Transport server**: Select the configured SFTP/FTP server
    - **Import profile**: Select the batch profile to use for files from this server
    - **Filename patterns**: Optional patterns to match specific files (one per line)
@@ -86,8 +85,8 @@ Configure the plugin to connect transport servers with import profiles:
        - "Keep original framework" preserves the existing record's framework
        - "Default" uses the system default framework
        - Or select a specific framework
-5. Save the setting
-6. Repeat for additional transport servers/profiles as needed
+4. Save the setting
+5. Repeat for additional transport servers/profiles as needed
 
 ## Usage
 
@@ -242,7 +241,7 @@ When auto-commit is disabled, staged records require manual review:
 
 - **Solution**: Check form validation errors
 - **Solution**: Ensure transport servers and profiles exist
-- **Solution**: Verify user has plugin configuration permissions
+- **Solution**: Verify user has tools permissions (tools module access)
 
 **Problem**: Plugin not running in cron
 
