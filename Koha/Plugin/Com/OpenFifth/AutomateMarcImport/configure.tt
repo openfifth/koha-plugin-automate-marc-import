@@ -1,0 +1,132 @@
+[% USE raw %]
+[% USE Asset %]
+[% PROCESS 'i18n.inc' %]
+[% SET footerjs = 1 %]
+[% INCLUDE 'doc-head-open.inc' %]
+<title>[% FILTER collapse %]
+    [% t("Configuration") | html %] &rsaquo;
+    [% t("Automate MARC Import") | html %] &rsaquo;
+    [% t("Koha") | html %]
+[% END %]</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body id="plugins_AutomateMarcImport_configure" class="plugins">
+[% WRAPPER 'header.inc' %]
+    [% INCLUDE 'cat-search.inc' %]
+[% END %]
+
+[% WRAPPER 'sub-header.inc' %]
+    [% WRAPPER breadcrumbs %]
+        [% WRAPPER breadcrumb_item %]
+            <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a>
+        [% END %]
+        [% WRAPPER breadcrumb_item %]
+            <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=tool">Automate MARC Import</a>
+        [% END %]
+        [% WRAPPER breadcrumb_item bc_active = 1 %]
+            <span>Configuration</span>
+        [% END %]
+    [% END #/ WRAPPER breadcrumbs %]
+[% END #/ WRAPPER sub-header.inc %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-10 order-md-2 order-sm-1">
+            <main>
+                <h1>Automate MARC Import Configuration</h1>
+
+                [% IF success_message %]
+                    <div class="alert alert-success">
+                        [% success_message | html %]
+                    </div>
+                [% END %]
+
+                [% IF error_message %]
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> [% error_message | html %]
+                    </div>
+                [% END %]
+
+                <form method="post" id="configure_form">
+                    <input type="hidden" name="class" value="[% CLASS %]"/>
+                    <input type="hidden" name="method" value="configure"/>
+                    <input type="hidden" name="save" value="1"/>
+
+                    <fieldset class="rows">
+                        <legend>Archive Settings</legend>
+                        <ol>
+                            <li>
+                                <label for="archive_retention_count">Archive retention count: </label>
+                                <input type="number" name="archive_retention_count" id="archive_retention_count"
+                                       value="[% archive_retention_count | html %]"
+                                       min="0" max="100" step="1" size="5" />
+                                <div class="hint">
+                                    Maximum number of archived files to keep per import setting. Oldest files are deleted when this limit is exceeded.
+                                </div>
+                                <div class="hint">
+                                    Set to <strong>0</strong> to disable archiving entirely (processed files will be deleted immediately after staging).
+                                </div>
+                                <div class="hint">
+                                    Default: <strong>10</strong> files. Maximum: <strong>100</strong> files.
+                                </div>
+                            </li>
+                        </ol>
+                    </fieldset>
+
+                    <fieldset class="action">
+                        <input type="submit" class="btn btn-primary" value="Save Configuration" />
+                        <a class="cancel" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=tool">Cancel</a>
+                    </fieldset>
+                </form>
+
+                <div class="alert alert-info">
+                    <h4>About Archive Retention</h4>
+                    <p>
+                        When MARC files are processed, they are archived to allow for deduplication (preventing the same file from being imported twice).
+                        Each import setting has its own archive directory located at <code>Archive/{setting_id}/</code>.
+                    </p>
+                    <p>
+                        The retention count limits how many archived files are kept per setting. This prevents the archive from growing indefinitely and consuming disk space.
+                    </p>
+                    <p>
+                        <strong>Note:</strong> Files in the archive are used for MD5-based deduplication. If you set a very low retention count,
+                        older files may be re-imported if they appear on the SFTP server again after their archived copy has been deleted.
+                    </p>
+                </div>
+            </main>
+        </div>
+        <div class="col-md-2 order-sm-2 order-md-1">
+            <aside> [% INCLUDE 'tools-menu.inc' %] </aside>
+        </div>
+    </div>
+</div>
+
+[% MACRO jsinclude BLOCK %]
+    [% Asset.js("js/tools-menu.js") | $raw %]
+    <script>
+        $(document).ready(function(){
+            // Client-side validation
+            $('#configure_form').on('submit', function(e) {
+                var retentionCount = $('#archive_retention_count').val();
+
+                // Check if it's a valid non-negative integer
+                if (!/^\d+$/.test(retentionCount)) {
+                    alert('Retention count must be a whole number.');
+                    e.preventDefault();
+                    return false;
+                }
+
+                var count = parseInt(retentionCount, 10);
+                if (count < 0 || count > 100) {
+                    alert('Retention count must be between 0 and 100.');
+                    e.preventDefault();
+                    return false;
+                }
+
+                return true;
+            });
+        });
+    </script>
+[% END %]
+
+[% INCLUDE 'intranet-bottom.inc' %]

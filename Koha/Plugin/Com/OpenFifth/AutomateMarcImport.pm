@@ -143,6 +143,30 @@ sub tool {
     $self->output_html( $template->output() );
 }
 
+sub configure {
+    my ( $self, $args ) = @_;
+    my $cgi = $self->{'cgi'};
+    my $template = $self->get_template({ file => 'configure.tt' });
+
+    if ($cgi->param('save')) {
+        my $retention_count = $cgi->param('archive_retention_count');
+
+        # Validate: must be non-negative integer, max 100
+        if (defined $retention_count && $retention_count =~ /^\d+$/ && $retention_count >= 0 && $retention_count <= 100) {
+            $self->store_data({ archive_retention_count => int($retention_count) });
+            $template->param(success_message => 'Configuration saved successfully.');
+        } else {
+            $template->param(error_message => 'Retention count must be a number between 0 and 100.');
+        }
+    }
+
+    $template->param(
+        archive_retention_count => $self->retrieve_data('archive_retention_count') // 10
+    );
+
+    $self->output_html($template->output());
+}
+
 sub cronjob_nightly {
     my ( $self ) = @_;
 
@@ -194,17 +218,29 @@ sub cronjob_nightly {
 
         foreach my $filehash (@{$file_list}) {
             my $filename = $filehash->{filename};
-            
+
             # Check if file has a supported MARC extension
             if (!$self->_is_supported_marc_file($filename)) {
                 next;
-            }     
+            }
             if (!$self->_was_modified_since_last_fetch( $filehash )) {
                 next;
             }
 
+            # Get setting data early so we can use setting_id for archive paths
+            my @split_filename = split(/\./, $filename );
+            my $setting_data = $self->_get_setting_by_filename($transport_id, $split_filename[0]);
+            my $setting_id = $setting_data->{id};
+            my $profile_id = $setting_data->{profile_id};
+            my $auto_commit = $setting_data->{auto_commit} // 0;
+            my $framework = $setting_data->{framework} // '';
+            my $overlay_framework = $setting_data->{overlay_framework} // '';
+
+            # Ensure per-setting archive directory exists
+            $self->_ensure_plugin_directories($setting_id);
+
             # Check if file has already been processed (MD5 deduplication)
-            if (!$self->_should_process_file($filename)) {
+            if (!$self->_should_process_file($filename, $setting_id)) {
                 $self->{logger}->info("File '$filename' has already been processed (MD5 match), skipping");
                 next;
             }
@@ -237,13 +273,6 @@ sub cronjob_nightly {
                 next; # Skip this file and continue with next
             };
 
-            my @split_filename = split(/\./, $filename );
-            my $setting_data = $self->_get_setting_by_filename($transport_id, $split_filename[0]);
-            my $profile_id = $setting_data->{profile_id};
-            my $auto_commit = $setting_data->{auto_commit} // 0;
-            my $framework = $setting_data->{framework} // '';
-            my $overlay_framework = $setting_data->{overlay_framework} // '';
-
             # Try to stage file (and optionally import)
             my $batch_id;
             try {
@@ -252,8 +281,8 @@ sub cronjob_nightly {
                 my $action = $auto_commit ? "staged and imported" : "staged";
                 $self->{logger}->info("Successfully $action file '$filename' using profile ID $profile_id (batch $batch_id)");
 
-                # Archive the processed file
-                $self->_archive_file($localFile->full_path(), $filename);
+                # Archive the processed file to per-setting directory
+                $self->_archive_file($localFile->full_path(), $filename, $setting_id);
 
             } catch {
                 $self->{logger}->error("Failed to stage file '$filename': $_");
@@ -841,22 +870,33 @@ sub _log_progress {
 }
 
 sub _ensure_plugin_directories {
-    my ( $self ) = @_;
+    my ( $self, $setting_id ) = @_;
 
-    my @required_dirs = ('Archive');
+    # Always ensure base Archive directory exists
+    my $archive_base = $self->{plugindir} . "/Archive";
+    if (!-d $archive_base) {
+        mkdir($archive_base, 0755) or $self->{logger}->warn("Could not create directory $archive_base: $!");
+    }
 
-    foreach my $dir (@required_dirs) {
-        my $full_path = $self->{plugindir} . "/$dir";
-        if (!-d $full_path) {
-            mkdir($full_path, 0755) or $self->{logger}->warn("Could not create directory $full_path: $!");
+    # If setting_id is provided, ensure per-setting archive directory exists
+    if (defined $setting_id && $setting_id ne '') {
+        my $setting_archive = "$archive_base/$setting_id";
+        if (!-d $setting_archive) {
+            mkdir($setting_archive, 0755) or $self->{logger}->warn("Could not create directory $setting_archive: $!");
         }
     }
 }
 
 sub _should_process_file {
-    my ( $self, $filename ) = @_;
+    my ( $self, $filename, $setting_id ) = @_;
 
-    my $archive_path = $self->{plugindir} . "/Archive/$filename";
+    # Use per-setting archive path if setting_id is provided
+    my $archive_path;
+    if (defined $setting_id && $setting_id ne '') {
+        $archive_path = $self->{plugindir} . "/Archive/$setting_id/$filename";
+    } else {
+        $archive_path = $self->{plugindir} . "/Archive/$filename";
+    }
 
     # If file doesn't exist in archive, it's new and should be processed
     return 1 unless -f $archive_path;
@@ -868,9 +908,15 @@ sub _should_process_file {
 }
 
 sub _check_file_duplicate {
-    my ( $self, $source_file, $filename ) = @_;
+    my ( $self, $source_file, $filename, $setting_id ) = @_;
 
-    my $archive_file = $self->{plugindir} . "/Archive/$filename";
+    # Use per-setting archive path if setting_id is provided
+    my $archive_file;
+    if (defined $setting_id && $setting_id ne '') {
+        $archive_file = $self->{plugindir} . "/Archive/$setting_id/$filename";
+    } else {
+        $archive_file = $self->{plugindir} . "/Archive/$filename";
+    }
 
     # If file doesn't exist in archive, it's not a duplicate
     return 0 unless -f $archive_file;
@@ -898,17 +944,34 @@ sub _check_file_duplicate {
 }
 
 sub _archive_file {
-    my ( $self, $source_file, $filename ) = @_;
+    my ( $self, $source_file, $filename, $setting_id ) = @_;
 
-    my $archive_path = $self->{plugindir} . "/Archive/$filename";
+    my $retention_count = $self->retrieve_data('archive_retention_count') // 10;
+
+    # If retention count is 0, skip archiving entirely (just clean up)
+    if ($retention_count == 0) {
+        $self->{logger}->info("Archive retention count is 0, not archiving file '$filename'");
+        if (-f $source_file) {
+            unlink($source_file) or $self->{logger}->warn("Could not remove temporary file $source_file: $!");
+        }
+        return;
+    }
+
+    # Use per-setting archive path if setting_id is provided
+    my $archive_path;
+    if (defined $setting_id && $setting_id ne '') {
+        $archive_path = $self->{plugindir} . "/Archive/$setting_id/$filename";
+    } else {
+        $archive_path = $self->{plugindir} . "/Archive/$filename";
+    }
 
     # Check if this is actually a duplicate before archiving
-    if ($self->_check_file_duplicate($source_file, $filename)) {
+    if ($self->_check_file_duplicate($source_file, $filename, $setting_id)) {
         $self->{logger}->info("File '$filename' is identical to archived version, not re-archiving");
     } else {
         # Copy file to archive
         if (copy($source_file, $archive_path)) {
-            $self->{logger}->info("Archived file '$filename' to Archive directory");
+            $self->{logger}->info("Archived file '$filename' to Archive/$setting_id/ directory");
         } else {
             $self->{logger}->error("Failed to archive file '$filename': $!");
         }
@@ -917,6 +980,59 @@ sub _archive_file {
     # Clean up the source file from plugin directory
     if (-f $source_file) {
         unlink($source_file) or $self->{logger}->warn("Could not remove temporary file $source_file: $!");
+    }
+
+    # Apply retention policy to the setting's archive directory
+    if (defined $setting_id && $setting_id ne '') {
+        $self->_apply_retention_policy($setting_id);
+    }
+}
+
+sub _apply_retention_policy {
+    my ( $self, $setting_id ) = @_;
+
+    return unless defined $setting_id && $setting_id ne '';
+
+    my $max_files = $self->retrieve_data('archive_retention_count') // 10;
+
+    # If max_files is 0, retention is disabled (files are not archived)
+    return if $max_files == 0;
+
+    my $archive_dir = $self->{plugindir} . "/Archive/$setting_id";
+
+    return unless -d $archive_dir;
+
+    # Get list of files in the archive directory
+    opendir(my $dh, $archive_dir) or do {
+        $self->{logger}->warn("Cannot open archive directory $archive_dir: $!");
+        return;
+    };
+
+    my @files;
+    while (my $file = readdir($dh)) {
+        next if $file =~ /^\./; # Skip . and ..
+        my $full_path = "$archive_dir/$file";
+        next unless -f $full_path; # Skip directories
+        push @files, {
+            path => $full_path,
+            mtime => (stat($full_path))[9]
+        };
+    }
+    closedir($dh);
+
+    # Sort by modification time (newest first)
+    @files = sort { $b->{mtime} <=> $a->{mtime} } @files;
+
+    # Delete files beyond the retention limit
+    if (scalar(@files) > $max_files) {
+        my @files_to_delete = splice(@files, $max_files);
+        foreach my $file (@files_to_delete) {
+            if (unlink($file->{path})) {
+                $self->{logger}->info("Retention policy: deleted old archive file $file->{path}");
+            } else {
+                $self->{logger}->warn("Retention policy: failed to delete $file->{path}: $!");
+            }
+        }
     }
 }
 
