@@ -799,21 +799,24 @@ sub _stage {
 
 sub _search_for_matches {
     my ( $self, $record_type, $overlay_action, $nomatch_action, $item_action, $batch_id, $matcher_id ) = @_;
-    my $matcher = C4::Matcher->fetch( $matcher_id );
-    if ( defined $matcher ) {
-        SetImportBatchMatcher( $batch_id, $matcher_id );
-    } elsif ( $record_type eq 'biblio' ) {
-        $matcher = C4::Matcher->new($record_type);
-        $matcher->add_simple_matchpoint( 'isbn', 1000, '020', 'a', -1, 0, '' );
-        $matcher->add_simple_required_check(
-            '245', 'a', -1, 0, '',
-            '245', 'a', -1, 0, ''
-        );
-    }
+
     SetImportBatchOverlayAction( $batch_id, $overlay_action );
     SetImportBatchNoMatchAction( $batch_id, $nomatch_action );
     SetImportBatchItemAction( $batch_id, $item_action );
-    return BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
+
+    if ( $matcher_id ) {
+        my $matcher = C4::Matcher->fetch( $matcher_id );
+        if ( defined $matcher ) {
+            SetImportBatchMatcher( $batch_id, $matcher_id );
+            return BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
+        } else {
+            $self->{logger}->warn("Matcher ID $matcher_id not found, skipping matching");
+            return 0;
+        }
+    } else {
+        # No matcher configured, skip matching
+        return 0;
+    }
 }
 
 sub _is_supported_marc_file {
