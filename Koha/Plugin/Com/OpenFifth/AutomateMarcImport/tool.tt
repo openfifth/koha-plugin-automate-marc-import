@@ -47,10 +47,26 @@
                         </div>
                     [% END %]
                     <form method="get" id="automate_marc_import_form">
+                        <input type="hidden" name="class" value="[% CLASS %]"/>
+                        <input type="hidden" name="method" value="[% METHOD %]"/>
+                        <fieldset class="rows">
+                            <legend>Identification</legend>
+                            <ol>
+                                <li>
+                                    <label for="name" class="required">Name: </label>
+                                    <input type="text" name="name" id="name" value="[% name | html %]" size="50" maxlength="100" required="required" />
+                                    <span class="required">Required</span>
+                                    <div class="hint">A short, descriptive name for this import setting (e.g., "Baker &amp; Taylor Weekly", "Ingram Daily Orders")</div>
+                                </li>
+                                <li>
+                                    <label for="description">Description: </label>
+                                    <textarea name="description" id="description" rows="3" cols="50" maxlength="500">[% description | html %]</textarea>
+                                    <div class="hint">Optional. Provide additional details about the purpose of this setting or any special notes.</div>
+                                </li>
+                            </ol>
+                        </fieldset>
                         <fieldset class="rows">
                             <legend>Transport ((S)FTP server)</legend>
-                            <input type="hidden" name="class" value="[% CLASS %]"/>
-                            <input type="hidden" name="method" value="[% METHOD %]"/>
                             <label for="selected_transport_id" class="required">Transport name: </label>
                             [% IF available_transport.count %]
                             <select name="selected_transport_id" id="selected_transport_id" class="select2 required" required="required">
@@ -230,6 +246,8 @@
                             <table id="automate_marc_import_setting">
                                 <thead>
                                     <tr>
+                                        <th>Name</th>
+                                        <th>Description</th>
                                         <th>Server</th>
                                         <th>Filename patterns</th>
                                         <th>Profile</th>
@@ -250,6 +268,8 @@
                                 <tbody>
                                     [% FOREACH setting IN automate_marc_import_plugin_settings %]
                                         <tr>
+                                            <td id="name_[% setting.id %]"><strong>[% setting.name | html %]</strong></td>
+                                            <td id="description_[% setting.id %]">[% IF setting.description %][% setting.description | html %][% ELSE %]<em>(none)</em>[% END %]</td>
                                             <td id="transport_name_[% setting.id %]">[% setting.transport_name %]</td>
                                             <td id="filenames_[% setting.id %]">[% IF setting.filenames %][% setting.filenames | html | html_line_break %][% ELSE %]<em>(default)</em>[% END %]</td>
                                             <td id="profile_name_[% setting.id %]">[% setting.profile_name %]</td>
@@ -385,6 +405,13 @@
                 if (window.location.href.includes('op=add_form') || $('#automate_marc_import_form').length) {
                     $('#automate_marc_import_form').validate({
                         rules: {
+                            name: {
+                                required: true,
+                                maxlength: 100
+                            },
+                            description: {
+                                maxlength: 500
+                            },
                             selected_transport_id: {
                                 required: true
                             },
@@ -393,6 +420,13 @@
                             }
                         },
                         messages: {
+                            name: {
+                                required: "Name is required",
+                                maxlength: "Name must be 100 characters or less"
+                            },
+                            description: {
+                                maxlength: "Description must be 500 characters or less"
+                            },
                             selected_transport_id: {
                                 required: "Transport selection is required"
                             },

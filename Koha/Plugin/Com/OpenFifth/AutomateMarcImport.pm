@@ -79,6 +79,8 @@ sub tool {
                 op => $op,
                 selected_setting_id => $selected_setting_id,
                 # Pre-populate form with submitted values
+                name => $cgi->param('name'),
+                description => $cgi->param('description'),
                 selected_transport_id => $cgi->param('selected_transport_id'),
                 profile_id => $cgi->param('profile_id'),
                 filenames => $cgi->param('filenames'),
@@ -110,6 +112,8 @@ sub tool {
         $template->param(
             op => 'edit_form',
             selected_setting_id => $selected_setting_id,
+            name => $setting_data->{name},
+            description => $setting_data->{description},
             selected_transport_id => $setting_data->{transport_id},
             profile_id => $setting_data->{profile_id},
             filenames => $setting_data->{filenames},
@@ -403,6 +407,8 @@ sub _get_settings_for_display {
         # formats the data so it can be easily rendered in the settings table on the plugin's configuration page
         my %setting = (
             id => $setting_data->{id},
+            name => $setting_data->{name} // '',
+            description => $setting_data->{description} // '',
             transport_id => $transport->get_column($self->{transport_column_name}),
             transport_name => $transport->get_column('name'),
             profile_name => $profile->get_column('name'),
@@ -430,12 +436,29 @@ sub _validate_cgi_params {
     my ( $self, $cgi ) = @_;
 
     # Get parameters
+    my $name = $cgi->param('name') // '';
+    my $description = $cgi->param('description') // '';
     my $transport_id = $cgi->param('selected_transport_id');
     my $profile_id = $cgi->param('profile_id');
     my $filenames = $cgi->param('filenames') // '';
     my $auto_commit = $cgi->param('auto_commit') // 0;
     my $framework = $cgi->param('framework') // '';
     my $overlay_framework = $cgi->param('overlay_framework') // '';
+
+    # Validate name (required, max 100 chars)
+    $name =~ s/^\s+|\s+$//g;  # trim whitespace
+    if ($name eq '') {
+        return { valid => 0, error => "Name is required" };
+    }
+    if (length($name) > 100) {
+        return { valid => 0, error => "Name must be 100 characters or less" };
+    }
+
+    # Sanitize description (optional, max 500 chars)
+    $description =~ s/^\s+|\s+$//g;  # trim whitespace
+    if (length($description) > 500) {
+        return { valid => 0, error => "Description must be 500 characters or less" };
+    }
 
     # Check required fields are present
     if (!defined $transport_id || $transport_id eq '') {
@@ -487,6 +510,8 @@ sub _validate_cgi_params {
     return {
         valid => 1,
         data => {
+            name => $name,
+            description => $description,
             transport_id => int($transport_id),
             profile_id => int($profile_id),
             filenames => $sanitized_filenames,
@@ -552,6 +577,8 @@ sub _save_setting {
     # Use validated and sanitized data
     my %setting = (
         id => $setting_id,
+        name => $validation_result->{data}->{name},
+        description => $validation_result->{data}->{description},
         transport_id => $validation_result->{data}->{transport_id},
         profile_id => $validation_result->{data}->{profile_id},
         filenames => $validation_result->{data}->{filenames},
