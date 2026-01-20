@@ -9,7 +9,7 @@ A Koha plugin to automate the import and staging of MARC files by enabling night
 - **MD5 Deduplication**: Prevents reprocessing of identical files
 - **Auto-Commit Option**: Automatically commit staged records without manual review
 - **Framework Selection**: Configure bibliographic frameworks for new and replacement records when auto-committing
-- **Archive Management**: Automatic archiving of processed files
+- **Archive Management**: Per-setting archive directories with configurable retention policy
 - **MARC Modification Support**: Apply MARC modification templates during import
 - **Multi-Format Support**: Handles ISO2709 (.mrc, .mrcx) and MARCXML (.xml, .marcxml) files
 - **Duplicate Detection**: Configurable record matching and overlay rules
@@ -88,6 +88,20 @@ Configure the plugin to connect transport servers with import profiles:
 4. Save the setting
 5. Repeat for additional transport servers/profiles as needed
 
+### Archive Retention Settings
+
+Configure archive retention to manage disk space:
+
+1. Go to **Plugins > Manage Plugins**
+2. Find "Automate MARC Import" and click **Configure**
+3. Set the **Archive retention count**:
+   - Default: **10** files per import setting
+   - Maximum: **100** files
+   - Set to **0** to disable archiving (files deleted after processing)
+4. Click "Save Configuration"
+
+**Note**: Each import setting has its own archive directory (`Archive/{setting_id}/`). The retention count applies independently to each setting's archive. When the limit is exceeded, the oldest files are automatically deleted.
+
 ## Usage
 
 ### Nightly Automated Processing
@@ -101,8 +115,9 @@ The plugin runs automatically as part of Koha's nightly cron jobs:
 5. **Download**: Retrieves new MARC files to local storage
 6. **Staging**: Parses and stages MARC records using configured profiles
 7. **Optional Commit**: Automatically commits records if auto-commit is enabled
-8. **Archiving**: Moves processed files to archive directory
-9. **Cleanup**: Removes temporary files
+8. **Archiving**: Moves processed files to per-setting archive directory
+9. **Retention**: Deletes oldest archived files when retention limit is exceeded
+10. **Cleanup**: Removes temporary files
 
 ### Manual Review Workflow (When Auto-Commit Disabled)
 
@@ -152,8 +167,9 @@ When auto-commit is disabled, staged records require manual review:
 
 #### System Maintenance and Monitoring
 
-- Regularly review archived files and clean up old archives if needed
+- Configure archive retention count to manage disk space automatically
 - Monitor disk space usage for downloads and archives
+- Review per-setting archive directories (`Archive/{setting_id}/`) periodically
 - Check cron job logs for nightly processing status
 - Update credentials when vendor passwords change
 - Review and update import profiles as cataloging rules evolve
@@ -231,9 +247,10 @@ When auto-commit is disabled, staged records require manual review:
 
 **Problem**: Large archive directory
 
-- **Solution**: Implement archive cleanup policies
+- **Solution**: Reduce the archive retention count in plugin configuration
+- **Solution**: Set retention to 0 to disable archiving entirely
+- **Solution**: Manually clean up old per-setting archive directories (`Archive/{setting_id}/`)
 - **Solution**: Move old archives to long-term storage
-- **Solution**: Use compression for archived files
 
 ### Configuration Issues
 
