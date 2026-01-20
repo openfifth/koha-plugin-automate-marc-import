@@ -56,18 +56,18 @@ sub new {
     return $self;
 }
 
-sub configure {
+sub tool {
     my ( $self, $args  ) = @_;
     my $cgi = $self->{'cgi'};
 
-    my $template = $self->get_template( { file => 'configure.tt' } );
+    my $template = $self->get_template( { file => 'tool.tt' } );
 
     # save setting OR
     if ( defined $cgi->param('op') && $cgi->param('op') eq 'save') {
         my $save_result = $self->_save_setting( $cgi );
         # handle successful setting creation OR
         if ($save_result->{success}) {
-            my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
+            my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=tool";
             print $cgi->redirect($redirect_url);
             return;
         } else {
@@ -97,7 +97,7 @@ sub configure {
     # ..delete setting OR
     if ( defined $cgi->param('op') && $cgi->param('op') eq 'delete') {
         $self->_delete_setting( $cgi );
-        my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=configure";
+        my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=tool";
         print $cgi->redirect($redirect_url);
         return;
     }

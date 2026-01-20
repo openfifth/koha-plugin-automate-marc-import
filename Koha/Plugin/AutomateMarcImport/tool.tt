@@ -4,13 +4,13 @@
 [% SET footerjs = 1 %]
 [% INCLUDE 'doc-head-open.inc' %]
 <title>[% FILTER collapse %]
-    [% t("AutomateMarcImport") | html %] &rsaquo;
-    [% t("Plugins") | html %] &rsaquo;
+    [% t("Automate MARC Import") | html %] &rsaquo;
+    [% t("Tools") | html %] &rsaquo;
     [% t("Koha") | html %]
 [% END %]</title>
 [% INCLUDE 'doc-head-close.inc' %]
 </head>
-<body id="plugins_AutomateMarcImport" class="plugins">
+<body id="tools_AutomateMarcImport" class="tools">
 [% WRAPPER 'header.inc' %]
     [% INCLUDE 'cat-search.inc' %]
 [% END %]
@@ -18,21 +18,18 @@
 [% WRAPPER 'sub-header.inc' %]
     [% WRAPPER breadcrumbs %]
         [% WRAPPER breadcrumb_item %]
-            <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a>
-        [% END %]
-        [% WRAPPER breadcrumb_item %]
-            <span>Automate MARC Import Setting</span>
+            <a href="/cgi-bin/koha/tools/tools-home.pl">Tools</a>
         [% END %]
         [% IF op == 'add_form' || op == 'edit_form' %]
             [% WRAPPER breadcrumb_item %]
-                <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=configure">Configuration</a>
+                <a href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=tool">Automate MARC Import</a>
             [% END %]
             [% WRAPPER breadcrumb_item bc_active = 1 %]
                 <span>[% IF op == 'edit_form' %]Edit setting[% ELSE %]Add setting[% END %]</span>
             [% END %]
         [% ELSE %]
             [% WRAPPER breadcrumb_item bc_active= 1 %]
-                <span>Configuration</span>
+                <span>Automate MARC Import</span>
             [% END %]
         [% END %]
     [% END #/ WRAPPER breadcrumbs %]
@@ -284,11 +281,11 @@
             </main>
         </div>
         <div class="col-md-2 order-sm-2 order-md-1">
-            <aside> [% INCLUDE 'admin-menu.inc' %] </aside>
+            <aside> [% INCLUDE 'tools-menu.inc' %] </aside>
         </div>
-    
+
     [% MACRO jsinclude BLOCK %]
-        [% Asset.js("js/admin-menu.js") | $raw %]
+        [% Asset.js("js/tools-menu.js") | $raw %]
         [% Asset.js("lib/jquery/plugins/jquery.validate.min.js") | $raw %]
         [% INCLUDE 'select2.inc' %]
         <script>
