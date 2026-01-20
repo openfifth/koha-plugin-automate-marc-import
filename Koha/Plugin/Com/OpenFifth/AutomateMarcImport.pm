@@ -810,8 +810,8 @@ sub _search_for_matches {
             '245', 'a', -1, 0, ''
         );
     }
-    SetImportBatchOverlayAction( $batch_id, $overlay_action ? 'ignore' : 'replace' );
-    SetImportBatchNoMatchAction( $batch_id, $nomatch_action ? 'ignore' : 'create_new' );
+    SetImportBatchOverlayAction( $batch_id, $overlay_action );
+    SetImportBatchNoMatchAction( $batch_id, $nomatch_action );
     SetImportBatchItemAction( $batch_id, $item_action );
     return BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
 }
