@@ -391,12 +391,23 @@
                 return $.ajax("/api/v1/import_batch_profiles").then(profiles => profiles);
             }
 
+            // Templates and matchers are passed from the controller since their API endpoints don't exist
             const getTemplates = () => {
-                return $.ajax("/api/v1/marc_modification_templates").then(templates => templates).catch(() => []);
+                const templates = [
+                    [% FOREACH tmpl IN marc_modification_templates %]
+                    { template_id: [% tmpl.template_id %], name: "[% tmpl.name | replace('"', '\\"') %]" }[% UNLESS loop.last %],[% END %]
+                    [% END %]
+                ];
+                return Promise.resolve(templates);
             }
 
             const getMatchers = () => {
-                return $.ajax("/api/v1/record_matchers").then(matchers => matchers).catch(() => []);
+                const matchers = [
+                    [% FOREACH m IN record_matchers %]
+                    { matcher_id: [% m.matcher_id %], code: "[% m.code | replace('"', '\\"') %]" }[% UNLESS loop.last %],[% END %]
+                    [% END %]
+                ];
+                return Promise.resolve(matchers);
             }
             
             // Add form validation using jQuery Validate (Koha standard)

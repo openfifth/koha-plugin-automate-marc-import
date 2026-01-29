@@ -74,6 +74,10 @@ sub tool {
             # Display error message to user
             my $selected_setting_id = $cgi->param('selected_setting_id');
             my $op = defined $selected_setting_id && $selected_setting_id ne '' ? 'edit_form' : 'add_form';
+
+            # Build lookup data for templates and matchers (for JavaScript use)
+            my ($template_list, $matcher_list) = $self->_get_template_and_matcher_lists();
+
             $template->param(
                 error_message => $save_result->{error},
                 op => $op,
@@ -90,6 +94,8 @@ sub tool {
                 available_profiles => Koha::ImportBatchProfiles->search(),
                 available_transport => Koha::File::Transports->search(),
                 available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
+                marc_modification_templates => $template_list,
+                record_matchers => $matcher_list,
             );
             $self->output_html( $template->output() );
             return;
@@ -109,6 +115,9 @@ sub tool {
         my $selected_setting_id = $cgi->param('selected_setting_id');
         my $setting_data = decode_json($self->retrieve_data( $selected_setting_id ));
 
+        # Build lookup data for templates and matchers (for JavaScript use)
+        my ($template_list, $matcher_list) = $self->_get_template_and_matcher_lists();
+
         $template->param(
             op => 'edit_form',
             selected_setting_id => $selected_setting_id,
@@ -123,6 +132,8 @@ sub tool {
             available_profiles => Koha::ImportBatchProfiles->search(),
             available_transport => Koha::File::Transports->search(),
             available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
+            marc_modification_templates => $template_list,
+            record_matchers => $matcher_list,
         );
         $self->output_html( $template->output() );
         return;
@@ -133,12 +144,18 @@ sub tool {
     if ($cgi->param('op')) {
         $template->param(op => $cgi->param('op'))
     }
+
+    # Build lookup data for templates and matchers (for JavaScript use in add_form)
+    my ($template_list, $matcher_list) = $self->_get_template_and_matcher_lists();
+
     $template->param(
         available_profiles => Koha::ImportBatchProfiles->search(),
         available_transport => Koha::File::Transports->search(),
         available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
         automate_marc_import_plugin_settings => \@automate_marc_import_plugin_settings,
-        automate_marc_import_plugin_settings_count => scalar @automate_marc_import_plugin_settings
+        automate_marc_import_plugin_settings_count => scalar @automate_marc_import_plugin_settings,
+        marc_modification_templates => $template_list,
+        record_matchers => $matcher_list,
     );
     $self->output_html( $template->output() );
 }
@@ -459,6 +476,32 @@ sub _get_settings_for_display {
         push @automate_marc_import_plugin_settings, \%setting;
     }
     return  @automate_marc_import_plugin_settings;
+}
+
+sub _get_template_and_matcher_lists {
+    my ( $self ) = @_;
+
+    # Build template list for JavaScript
+    my @template_list;
+    my @templates = GetModificationTemplates();
+    foreach my $tmpl (@templates) {
+        push @template_list, {
+            template_id => $tmpl->{template_id},
+            name => $tmpl->{name},
+        };
+    }
+
+    # Build matcher list for JavaScript
+    my @matcher_list;
+    my @matchers = C4::Matcher::GetMatcherList();
+    foreach my $m (@matchers) {
+        push @matcher_list, {
+            matcher_id => $m->{matcher_id},
+            code => $m->{code},
+        };
+    }
+
+    return (\@template_list, \@matcher_list);
 }
 
 sub _validate_cgi_params {
