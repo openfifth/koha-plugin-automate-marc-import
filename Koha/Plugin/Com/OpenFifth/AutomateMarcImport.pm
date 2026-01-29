@@ -427,8 +427,8 @@ sub _get_settings_for_display {
 
     foreach my $setting ( split( /,/, $self->retrieve_data('selected_setting_ids')) ) {
         my $setting_data = decode_json($self->retrieve_data($setting));
-        my $transport = Koha::File::Transports->search({ $self->{transport_column_name} => $setting_data->{transport_id} });
-        my $profile = Koha::ImportBatchProfiles->search({ id => $setting_data->{profile_id} });
+        my $transport = Koha::File::Transports->find({ $self->{transport_column_name} => $setting_data->{transport_id} });
+        my $profile = Koha::ImportBatchProfiles->find({ id => $setting_data->{profile_id} });
 
         my $template_id = $profile->get_column('template_id');
         my $matcher_id = $profile->get_column('matcher_id');
