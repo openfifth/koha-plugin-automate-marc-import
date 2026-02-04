@@ -4,8 +4,8 @@
     "pm_path": "Koha/Plugin/Com/OpenFifth/AutomateMarcImport.pm"
   },
   "name": "koha-plugin-automate-marc-import",
-  "version": "1.0.23",
-  "previous_version": "1.0.22",
+  "version": "1.0.24",
+  "previous_version": "1.0.23",
   "description": "A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites",
   "main": "index.js",
   "scripts": {
