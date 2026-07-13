@@ -12,6 +12,17 @@ along with the comparison links — do not edit the heading or the links by hand
 
 ## [Unreleased]
 
+### Fixed
+- CSRF tokens and POST submission for the configure, save and delete forms
+- Transport connect/list/download failures now detected and logged instead of silently ignored
+- FTP filenames and file metadata read correctly from all transport listing formats
+- Download and archive directories created reliably before use
+- Batch match actions default sensibly when the import profile leaves them unset
+- Original framework kept on overlay when "keep original" is chosen
+- Matching progress callback passed correctly to the duplicate finder
+
+## [1.0.24] - 2026-02-04
+
 ### Added
 - Dynamic column name detection for Koha version compatibility
 - Automatic adaptation to different file transport table schemas (id/file_transport_id)
@@ -45,3 +56,4 @@ along with the comparison links — do not edit the heading or the links by hand
 - Atomic database transactions ensuring data integrity
 
 [Unreleased]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.24...HEAD
+[1.0.24]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.23...v1.0.24
