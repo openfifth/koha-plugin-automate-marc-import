@@ -63,7 +63,7 @@ sub tool {
     my $template = $self->get_template( { file => 'tool.tt' } );
 
     # save setting OR
-    if ( defined $cgi->param('op') && $cgi->param('op') eq 'save') {
+    if ( defined $cgi->param('op') && $cgi->param('op') eq 'cud-save') {
         my $save_result = $self->_save_setting( $cgi );
         # handle successful setting creation OR
         if ($save_result->{success}) {

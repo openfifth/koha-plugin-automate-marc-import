@@ -46,7 +46,8 @@
                             <strong>Error:</strong> [% error_message | html %]
                         </div>
                     [% END %]
-                    <form method="get" id="automate_marc_import_form">
+                    <form method="post" id="automate_marc_import_form">
+                        [% INCLUDE 'csrf-token.inc' %]
                         <input type="hidden" name="class" value="[% CLASS %]"/>
                         <input type="hidden" name="method" value="[% METHOD %]"/>
                         <fieldset class="rows">
@@ -219,7 +220,7 @@
                             </fieldset>
                         </fieldset>
                          <fieldset class="action">
-                             <input type="hidden" name="op" value="save" />
+                             <input type="hidden" name="op" value="cud-save" />
                              [% IF op == 'edit_form' %]
                              <input type="hidden" name="selected_setting_id" value="[% selected_setting_id %]" />
                              <input type="submit" class="btn btn-primary" value="Update Setting" />
