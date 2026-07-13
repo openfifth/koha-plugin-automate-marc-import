@@ -409,6 +409,16 @@ sub _file_entry_size {
     return 0;
 }
 
+sub _file_entry_mtime {
+    my ( $self, $filehash ) = @_;
+
+    return $filehash->{mtime} if defined $filehash->{mtime};
+    return $filehash->{a}->mtime // $filehash->{a}->atime if $filehash->{a};
+
+    my $entry = $self->_parse_longname($filehash);
+    return $entry ? $entry->[3] : undef;
+}
+
 sub _get_profile_id_by_filename {
     my ( $self, $transport_id, $filename ) = @_;
 
@@ -904,11 +914,12 @@ sub _is_supported_marc_file {
 
 sub _was_modified_since_last_fetch {
     my ( $self, $filehash ) = @_;
-    # FIXME: record and then retrieve the time when we last fetched from the transport instead?
-    # my $last_run_time = time() - 86400;
+
     my $last_run_time = time() - 8640000;
-    my $last_mod_time = defined $filehash->{a}->mtime ? $filehash->{a}->mtime : $filehash->{a}->atime;
-    return ($last_mod_time > $last_run_time);
+    my $last_mod_time = $self->_file_entry_mtime($filehash);
+    return 1 unless defined $last_mod_time;
+
+    return $last_mod_time > $last_run_time;
 }
 
 sub _was_already_imported {
