@@ -205,14 +205,11 @@ sub cronjob_nightly {
             next;
         }
 
-        # Try to connect to transport
-        try {
-            $transport->connect();
-            $self->{logger}->info("Connected to transport '$transport_name'");
-        } catch {
-            $self->{logger}->error("Failed to connect to transport '$transport_name': $_");
-            next; # Skip this transport and continue with next
-        };
+        unless ( $transport->connect() ) {
+            $self->{logger}->error("Failed to connect to transport '$transport_name': " . $self->_transport_error($transport));
+            next;
+        }
+        $self->{logger}->info("Connected to transport '$transport_name'");
 
         # Try to change to download directory
         try {
@@ -387,6 +384,16 @@ sub _get_selected_transport_ids {
         push @selected_transport_ids, $setting_data->{transport_id};
     }
     return @selected_transport_ids;
+}
+
+sub _transport_error {
+    my ( $self, $transport ) = @_;
+
+    my ($last_error) = grep { $_->type eq 'error' } reverse @{ $transport->object_messages };
+    return 'unknown error' unless $last_error;
+
+    my $payload = $last_error->payload // {};
+    return $payload->{error} // $last_error->message;
 }
 
 sub _get_profile_id_by_filename {
