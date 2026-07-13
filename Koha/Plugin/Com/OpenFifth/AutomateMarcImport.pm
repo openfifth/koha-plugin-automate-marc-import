@@ -28,13 +28,13 @@ use Koha::ImportBatchProfiles;
 use Koha::Logger;
 use Koha::UploadedFile;
 
-our $VERSION = '1.0.24';
+our $VERSION         = '1.0.25';
 
 our $metadata = {
     name            => 'Automate Marc Import',
     author          => 'Open Fifth',
     date_authored   => '2022-05-19',
-    date_updated    => '2026-02-04',
+    date_updated    => '2026-07-13',
     minimum_version => '25.11.00.000',
     maximum_version => undef,
     version         => $VERSION,
