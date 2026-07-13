@@ -763,7 +763,6 @@ sub _stage {
     my ( $self, $input_file_path, $display_filename, $profile_id, $auto_commit, $framework, $overlay_framework) = @_;
     $auto_commit //= 0; # Default to false if not specified
     $framework //= '';
-    $overlay_framework //= '';
     my $profile = Koha::ImportBatchProfiles->find($profile_id);
 
     if ( $profile_id && !$profile ) {
@@ -1128,7 +1127,6 @@ sub _commit_batch {
     $framework //= '';
     # Convert '_USE_ORIG_' to undef (tells Koha to keep original framework)
     $overlay_framework = undef if defined $overlay_framework && $overlay_framework eq '_USE_ORIG_';
-    $overlay_framework //= '';
 
     try {
         $self->{logger}->info("Committing batch $batch_id with framework='$framework', overlay_framework='" . ($overlay_framework // '_USE_ORIG_') . "'");
