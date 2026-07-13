@@ -951,17 +951,24 @@ sub _ensure_plugin_directories {
 
     # Always ensure base Archive directory exists
     my $archive_base = $self->{plugindir} . "/Archive";
-    if (!-d $archive_base) {
-        mkdir($archive_base, 0755) or $self->{logger}->warn("Could not create directory $archive_base: $!");
-    }
+    $self->_make_directory($archive_base);
 
     # If setting_id is provided, ensure per-setting archive directory exists
     if (defined $setting_id && $setting_id ne '') {
-        my $setting_archive = "$archive_base/$setting_id";
-        if (!-d $setting_archive) {
-            mkdir($setting_archive, 0755) or $self->{logger}->warn("Could not create directory $setting_archive: $!");
-        }
+        $self->_make_directory("$archive_base/$setting_id");
     }
+}
+
+sub _make_directory {
+    my ( $self, $directory ) = @_;
+
+    return if -d $directory;
+
+    make_path( $directory, { error => \my $errors } );
+    return unless @{$errors};
+
+    my ( undef, $message ) = %{ $errors->[0] };
+    $self->{logger}->warn("Could not create directory $directory: $message");
 }
 
 sub _should_process_file {
