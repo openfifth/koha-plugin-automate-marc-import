@@ -278,25 +278,18 @@ sub cronjob_nightly {
             }
             $self->{logger}->info("Downloaded file '$filename' from transport '$transport_name'");
 
-            # Try to stage file (and optionally import)
-            my $batch_id;
-            try {
-                $batch_id = $self->_stage($localFile->full_path(), $filename, $profile_id, $auto_commit, $framework, $overlay_framework);
-
-                my $action = $auto_commit ? "staged and imported" : "staged";
-                $self->{logger}->info("Successfully $action file '$filename' using profile ID $profile_id (batch $batch_id)");
-
-                # Archive the processed file to per-setting directory
-                $self->_archive_file($localFile->full_path(), $filename, $setting_id);
-
+            my $batch_id = try {
+                $self->_stage($localFile->full_path(), $filename, $profile_id, $auto_commit, $framework, $overlay_framework);
             } catch {
                 $self->{logger}->error("Failed to stage file '$filename': $_");
-                # Clean up downloaded file on staging failure
-                if (-f $localFile->full_path()) {
-                    unlink($localFile->full_path());
-                }
-                next; # Continue with next file
+                unlink $localFile->full_path() if -f $localFile->full_path();
+                undef;
             };
+            next unless defined $batch_id;
+
+            my $action = $auto_commit ? "staged and imported" : "staged";
+            $self->{logger}->info("Successfully $action file '$filename' using profile ID $profile_id (batch $batch_id)");
+            $self->_archive_file($localFile->full_path(), $filename, $setting_id);
         }
     }
 }
