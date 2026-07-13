@@ -216,16 +216,13 @@ sub cronjob_nightly {
             next;
         }
 
-        # Try to list files
-        my $file_list;
-        try {
-            $file_list = $transport->list_files();
-        } catch {
-            $self->{logger}->error("Failed to list files for transport '$transport_name': $_");
-            next; # Skip this transport and continue with next
-        };
+        my $file_list = $transport->list_files();
+        unless ($file_list) {
+            $self->{logger}->error("Failed to list files for transport '$transport_name': " . $self->_transport_error($transport));
+            next;
+        }
 
-        next unless $file_list && @{$file_list};
+        next unless @{$file_list};
 
         foreach my $filehash (@{$file_list}) {
             my $filename = $filehash->{filename};
