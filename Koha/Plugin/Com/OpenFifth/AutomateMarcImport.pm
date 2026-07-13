@@ -777,9 +777,9 @@ sub _stage {
     my $marc_mod_template_id = $profile->template_id;
     my $parse_items = $profile->parse_items;
     my $matcher_id = $profile->matcher_id;
-    my $nomatch_action = $profile->nomatch_action;
-    my $overlay_action = $profile->overlay_action;
-    my $item_action = $profile->item_action;
+    my $nomatch_action = $profile->nomatch_action // 'create_new';
+    my $overlay_action = $profile->overlay_action // 'replace';
+    my $item_action = $profile->item_action // 'always_add';
 
     if ( !$input_file_path ) {
         $self->{logger}->error("Cannot open input file $input_file_path: $!");
