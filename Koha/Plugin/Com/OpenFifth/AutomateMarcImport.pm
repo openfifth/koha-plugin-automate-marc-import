@@ -880,7 +880,7 @@ sub _search_for_matches {
         my $matcher = C4::Matcher->fetch( $matcher_id );
         if ( defined $matcher ) {
             SetImportBatchMatcher( $batch_id, $matcher_id );
-            return BatchFindDuplicates( $batch_id, $matcher, 10, 100, $self->_log_progress );
+            return BatchFindDuplicates( $batch_id, $matcher, 10, 100, \&_log_progress );
         } else {
             $self->{logger}->warn("Matcher ID $matcher_id not found, skipping matching");
             return 0;
