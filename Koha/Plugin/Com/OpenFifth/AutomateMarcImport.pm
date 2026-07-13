@@ -272,14 +272,11 @@ sub cronjob_nightly {
                 permanent          => undef,
             });
 
-            # Try to download file
-            try {
-                $transport->download_file($filehash->{filename}, $localFile->full_path());
-                $self->{logger}->info("Downloaded file '$filename' from transport '$transport_name'");
-            } catch {
-                $self->{logger}->error("Failed to download file '$filename' from transport '$transport_name': $_");
-                next; # Skip this file and continue with next
-            };
+            unless ( $transport->download_file( $filehash->{filename}, $localFile->full_path() ) ) {
+                $self->{logger}->error("Failed to download file '$filename' from transport '$transport_name': " . $self->_transport_error($transport));
+                next;
+            }
+            $self->{logger}->info("Downloaded file '$filename' from transport '$transport_name'");
 
             # Try to stage file (and optionally import)
             my $batch_id;
