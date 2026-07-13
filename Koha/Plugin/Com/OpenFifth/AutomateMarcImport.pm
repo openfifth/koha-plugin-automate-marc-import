@@ -8,6 +8,7 @@ use base qw(Koha::Plugins::Base);
 use Digest::MD5;
 use File::Basename qw(dirname fileparse);
 use File::Copy qw(copy);
+use File::Listing qw(parse_dir);
 use File::Path qw(make_path);
 use JSON qw( encode_json decode_json );
 use Scalar::Util qw(looks_like_number);
@@ -226,7 +227,7 @@ sub cronjob_nightly {
         next unless @{$file_list};
 
         foreach my $filehash (@{$file_list}) {
-            my $filename = $filehash->{filename};
+            my $filename = $self->_file_entry_name($filehash);
 
             # Check if file has a supported MARC extension
             if (!$self->_is_supported_marc_file($filename)) {
@@ -261,10 +262,10 @@ sub cronjob_nightly {
             }
 
             # Use MD5 hash of filename for unique local storage path
-            my $file_hashvalue = Digest::MD5::md5_hex($filehash->{filename});
+            my $file_hashvalue = Digest::MD5::md5_hex($filename);
             my $localFile = Koha::UploadedFile->new({
                 hashvalue          => $file_hashvalue,
-                filename           => $filehash->{filename},
+                filename           => $filename,
                 dir                => $self->{plugindir},
                 filesize           => $self->_file_entry_size($filehash),
                 owner              => undef,
@@ -276,7 +277,7 @@ sub cronjob_nightly {
             my $download_dir = dirname( $localFile->full_path() );
             make_path($download_dir) unless -d $download_dir;
 
-            unless ( $transport->download_file( $filehash->{filename}, $localFile->full_path() ) ) {
+            unless ( $transport->download_file( $filename, $localFile->full_path() ) ) {
                 $self->{logger}->error("Failed to download file '$filename' from transport '$transport_name': " . $self->_transport_error($transport));
                 next;
             }
@@ -382,6 +383,22 @@ sub _transport_error {
 
     my $payload = $last_error->payload // {};
     return $payload->{error} // $last_error->message;
+}
+
+sub _parse_longname {
+    my ( $self, $filehash ) = @_;
+
+    return unless $filehash->{longname};
+
+    my ($entry) = @{ parse_dir( $filehash->{longname} ) };
+    return $entry;
+}
+
+sub _file_entry_name {
+    my ( $self, $filehash ) = @_;
+
+    my $entry = $self->_parse_longname($filehash);
+    return $entry ? $entry->[0] : $filehash->{filename};
 }
 
 sub _file_entry_size {
