@@ -287,7 +287,14 @@
                                             <td id="profile_item_action_[% setting.id %]">[% setting.profile_item_action %]</td>
                                              <td data-class-name="actions noExport">
                                                  <a class="btn btn-default btn-xs" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=edit&selected_setting_id=[% setting.id %]"><i class="fa fa-pencil" aria-hidden="true"></i> Edit</a>
-                                                 <a class="btn btn-default btn-xs delete_server" role="button" href="/cgi-bin/koha/plugins/run.pl?class=[% CLASS %]&method=[% METHOD %]&op=delete&selected_setting_id=[% setting.id %]"><i class="fa fa-trash-can" aria-hidden="true"></i> Delete</a>
+                                                 <form method="post" action="/cgi-bin/koha/plugins/run.pl" class="d-inline">
+                                                     [% INCLUDE 'csrf-token.inc' %]
+                                                     <input type="hidden" name="class" value="[% CLASS %]"/>
+                                                     <input type="hidden" name="method" value="[% METHOD %]"/>
+                                                     <input type="hidden" name="op" value="cud-delete"/>
+                                                     <input type="hidden" name="selected_setting_id" value="[% setting.id %]"/>
+                                                     <button type="submit" class="btn btn-default btn-xs delete_server"><i class="fa fa-trash-can" aria-hidden="true"></i> Delete</button>
+                                                 </form>
                                              </td>
                                         </tr>
                                     [% END %]

@@ -103,7 +103,7 @@ sub tool {
     }
 
     # ..delete setting OR
-    if ( defined $cgi->param('op') && $cgi->param('op') eq 'delete') {
+    if ( defined $cgi->param('op') && $cgi->param('op') eq 'cud-delete') {
         $self->_delete_setting( $cgi );
         my $redirect_url = "/cgi-bin/koha/plugins/run.pl?class=" . $cgi->param('class') . "&method=tool";
         print $cgi->redirect($redirect_url);
