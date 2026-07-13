@@ -6,8 +6,9 @@ use base qw(Koha::Plugins::Base);
 
 # Core Perl modules
 use Digest::MD5;
-use File::Basename qw(fileparse);
+use File::Basename qw(dirname fileparse);
 use File::Copy qw(copy);
+use File::Path qw(make_path);
 use JSON qw( encode_json decode_json );
 use Scalar::Util qw(looks_like_number);
 use Try::Tiny qw(catch try);
@@ -271,6 +272,9 @@ sub cronjob_nightly {
                 public             => undef,
                 permanent          => undef,
             });
+
+            my $download_dir = dirname( $localFile->full_path() );
+            make_path($download_dir) unless -d $download_dir;
 
             unless ( $transport->download_file( $filehash->{filename}, $localFile->full_path() ) ) {
                 $self->{logger}->error("Failed to download file '$filename' from transport '$transport_name': " . $self->_transport_error($transport));
