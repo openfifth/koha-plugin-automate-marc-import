@@ -211,13 +211,10 @@ sub cronjob_nightly {
         }
         $self->{logger}->info("Connected to transport '$transport_name'");
 
-        # Try to change to download directory
-        try {
-            $transport->change_directory($transport->download_directory);
-        } catch {
-            $self->{logger}->error("Failed to change to download directory for transport '$transport_name': $_");
-            next; # Skip this transport and continue with next
-        };
+        unless ( $transport->change_directory( $transport->download_directory ) ) {
+            $self->{logger}->error("Failed to change to download directory for transport '$transport_name': " . $self->_transport_error($transport));
+            next;
+        }
 
         # Try to list files
         my $file_list;
