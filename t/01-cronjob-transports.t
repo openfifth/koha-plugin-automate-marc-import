@@ -2,7 +2,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 4;
+use Test::More tests => 5;
 use Test::MockModule;
 
 use File::Temp qw(tempdir);
@@ -152,6 +152,28 @@ subtest 'sftp connection failure skips transport without dying' => sub {
 
     ok( $lived, 'cronjob survives a failed connection' );
     is( scalar @staged, 0, 'nothing staged when connection fails' );
+
+    $schema->storage->txn_rollback;
+};
+
+subtest 'transport that dies on connect skips transport without dying' => sub {
+    plan tests => 2;
+
+    $schema->storage->txn_begin;
+
+    # Koha 25.11's SFTP _abort_operation dies (missing JSON import in core),
+    # so transport methods can throw as well as return undef
+    my $mock_transport = Test::MockModule->new('Koha::File::Transport::SFTP');
+    $mock_transport->mock( 'connect', sub { die "Undefined subroutine ...::encode_json" } );
+
+    my $transport = build_transport( 'sftp', '/remote/downloads' );
+    my $plugin    = build_plugin_with_setting($transport);
+
+    @staged = ();
+    my $lived = eval { $plugin->cronjob_nightly(); 1 };
+
+    ok( $lived, 'cronjob survives a transport method that throws' );
+    is( scalar @staged, 0, 'nothing staged when connect throws' );
 
     $schema->storage->txn_rollback;
 };

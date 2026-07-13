@@ -207,18 +207,18 @@ sub cronjob_nightly {
             next;
         }
 
-        unless ( $transport->connect() ) {
+        unless ( $self->_call_transport( $transport, 'connect' ) ) {
             $self->{logger}->error("Failed to connect to transport '$transport_name': " . $self->_transport_error($transport));
             next;
         }
         $self->{logger}->info("Connected to transport '$transport_name'");
 
-        unless ( $transport->change_directory( $transport->download_directory ) ) {
+        unless ( $self->_call_transport( $transport, 'change_directory', $transport->download_directory ) ) {
             $self->{logger}->error("Failed to change to download directory for transport '$transport_name': " . $self->_transport_error($transport));
             next;
         }
 
-        my $file_list = $transport->list_files();
+        my $file_list = $self->_call_transport( $transport, 'list_files' );
         unless ($file_list) {
             $self->{logger}->error("Failed to list files for transport '$transport_name': " . $self->_transport_error($transport));
             next;
@@ -276,7 +276,7 @@ sub cronjob_nightly {
 
             $self->_make_directory( dirname( $localFile->full_path() ) );
 
-            unless ( $transport->download_file( $filename, $localFile->full_path() ) ) {
+            unless ( $self->_call_transport( $transport, 'download_file', $filename, $localFile->full_path() ) ) {
                 $self->{logger}->error("Failed to download file '$filename' from transport '$transport_name': " . $self->_transport_error($transport));
                 next;
             }
@@ -372,6 +372,17 @@ sub _get_selected_transport_ids {
         push @selected_transport_ids, $setting_data->{transport_id};
     }
     return @selected_transport_ids;
+}
+
+sub _call_transport {
+    my ( $self, $transport, $method, @args ) = @_;
+
+    return try {
+        $transport->$method(@args);
+    } catch {
+        $transport->add_message( { message => $method, type => 'error', payload => { error => "$_" } } );
+        undef;
+    };
 }
 
 sub _transport_error {
