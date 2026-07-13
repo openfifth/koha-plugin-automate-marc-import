@@ -265,7 +265,7 @@ sub cronjob_nightly {
                 hashvalue          => $file_hashvalue,
                 filename           => $filehash->{filename},
                 dir                => $self->{plugindir},
-                filesize           => $filehash->{a}->size,
+                filesize           => $self->_file_entry_size($filehash),
                 owner              => undef,
                 uploadcategorycode => undef,
                 public             => undef,
@@ -378,6 +378,14 @@ sub _transport_error {
 
     my $payload = $last_error->payload // {};
     return $payload->{error} // $last_error->message;
+}
+
+sub _file_entry_size {
+    my ( $self, $filehash ) = @_;
+
+    return $filehash->{size} if defined $filehash->{size};
+    return $filehash->{a}->size if $filehash->{a};
+    return 0;
 }
 
 sub _get_profile_id_by_filename {
