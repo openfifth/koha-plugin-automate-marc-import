@@ -48,6 +48,7 @@
                 [% END %]
 
                 <form method="post" id="configure_form">
+                    [% INCLUDE 'csrf-token.inc' %]
                     <input type="hidden" name="class" value="[% CLASS %]"/>
                     <input type="hidden" name="method" value="configure"/>
                     <input type="hidden" name="save" value="1"/>
