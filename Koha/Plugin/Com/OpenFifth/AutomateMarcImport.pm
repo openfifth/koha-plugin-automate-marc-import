@@ -274,8 +274,7 @@ sub cronjob_nightly {
                 permanent          => undef,
             });
 
-            my $download_dir = dirname( $localFile->full_path() );
-            make_path($download_dir) unless -d $download_dir;
+            $self->_make_directory( dirname( $localFile->full_path() ) );
 
             unless ( $transport->download_file( $filename, $localFile->full_path() ) ) {
                 $self->{logger}->error("Failed to download file '$filename' from transport '$transport_name': " . $self->_transport_error($transport));
