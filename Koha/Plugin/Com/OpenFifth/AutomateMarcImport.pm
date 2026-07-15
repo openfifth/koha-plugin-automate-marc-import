@@ -227,6 +227,13 @@ sub cronjob_nightly {
         next unless @{$file_list};
 
         foreach my $filehash (@{$file_list}) {
+
+            # Directories are now included in list_files() results across all
+            # transport backends; only real files are ever importable.
+            if ( ( $filehash->{type} // '' ) eq 'directory' ) {
+                next;
+            }
+
             my $filename = $self->_file_entry_name($filehash);
 
             # Check if file has a supported MARC extension
@@ -415,7 +422,6 @@ sub _file_entry_size {
     my ( $self, $filehash ) = @_;
 
     return $filehash->{size} if defined $filehash->{size};
-    return $filehash->{a}->size if $filehash->{a};
     return 0;
 }
 
@@ -423,7 +429,6 @@ sub _file_entry_mtime {
     my ( $self, $filehash ) = @_;
 
     return $filehash->{mtime} if defined $filehash->{mtime};
-    return $filehash->{a}->mtime // $filehash->{a}->atime if $filehash->{a};
 
     my $entry = $self->_parse_longname($filehash);
     return $entry ? $entry->[3] : undef;

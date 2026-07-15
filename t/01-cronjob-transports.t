@@ -30,6 +30,7 @@ package MockSftpAttributes {
     sub size  { return $_[0]->{size} }
     sub mtime { return $_[0]->{mtime} }
     sub atime { return $_[0]->{atime} }
+    sub perm  { return $_[0]->{perm} }
 }
 
 my @staged;
@@ -58,6 +59,11 @@ subtest 'local transport stages downloaded MARC files' => sub {
     write_file( "$remote_dir/test.mrc",  $MARC_CONTENT );
     write_file( "$remote_dir/notes.txt", "not a marc file" );
 
+    # A directory whose name happens to look like a MARC file: list_files()
+    # now includes directories on every transport, so only an explicit
+    # type check (not the file extension) can tell this apart from a real file.
+    mkdir "$remote_dir/archive.mrc" or die "Cannot create archive.mrc dir: $!";
+
     my $transport = build_transport( 'local', $remote_dir );
     my $plugin    = build_plugin_with_setting($transport);
 
@@ -84,12 +90,23 @@ subtest 'sftp transport stages downloaded MARC files' => sub {
             {
                 filename => 'vendor.mrc',
                 longname => '-rw-r--r-- 1 user group 62 Jan 01 12:00 vendor.mrc',
-                a        => MockSftpAttributes->new( size => length($MARC_CONTENT), mtime => time() ),
+                a        => MockSftpAttributes->new(
+                    size => length($MARC_CONTENT), mtime => time(), perm => oct('100644')
+                ),
             },
             {
                 filename => 'readme.txt',
                 longname => '-rw-r--r-- 1 user group 10 Jan 01 12:00 readme.txt',
-                a        => MockSftpAttributes->new( size => 10, mtime => time() ),
+                a        => MockSftpAttributes->new( size => 10, mtime => time(), perm => oct('100644') ),
+            },
+            {
+                # A directory whose name looks like a MARC file: only the
+                # type derived from the SFTP Attributes' perm bits (not the
+                # extension) can tell it apart from a real file now that
+                # directories are included everywhere.
+                filename => 'archive.mrc',
+                longname => 'drwxr-xr-x 2 user group 4096 Jan 01 12:00 archive.mrc',
+                a        => MockSftpAttributes->new( size => 4096, mtime => time(), perm => oct('040755') ),
             },
         ]
     );
@@ -114,11 +131,16 @@ subtest 'ftp transport stages downloaded MARC files' => sub {
 
     $schema->storage->txn_begin;
 
-    my $listing_date = strftime( '%b %d %H:%M', localtime( time() - 3600 ) );
+    my $listing_date = strftime( '%Y%m%d%H%M%S', gmtime( time() - 3600 ) );
     my $mock_ftp     = mock_ftp_connection(
         [
-            "-rw-r--r-- 1 user group 62 $listing_date supplier.mrc",
-            "-rw-r--r-- 1 user group 10 $listing_date readme.txt",
+            "type=file;size=62;modify=$listing_date;UNIX.mode=0644; supplier.mrc",
+            "type=file;size=10;modify=$listing_date;UNIX.mode=0644; readme.txt",
+
+            # A directory whose name looks like a MARC file: only the type
+            # fact (not the extension) can tell it apart from a real file
+            # now that directories are included everywhere.
+            "type=dir;modify=$listing_date; archive.mrc",
         ]
     );
 
@@ -258,15 +280,15 @@ sub mock_ftp_connection {
     my ($listing) = @_;
 
     my $mock = Test::MockModule->new('Net::FTP');
-    $mock->mock( 'new',     sub { my $class = shift; return bless {}, $class } );
-    $mock->mock( 'login',   sub { return 1 } );
-    $mock->mock( 'cwd',     sub { return 1 } );
-    $mock->mock( 'pwd',     sub { return '/' } );
-    $mock->mock( 'dir',     sub { return $listing } );
-    $mock->mock( 'message', sub { return '' } );
-    $mock->mock( 'status',  sub { return 0 } );
-    $mock->mock( 'quit',    sub { return 1 } );
-    $mock->mock( 'abort',   sub { return 1 } );
+    $mock->mock( 'new',       sub { my $class = shift; return bless {}, $class } );
+    $mock->mock( 'login',     sub { return 1 } );
+    $mock->mock( 'cwd',       sub { return 1 } );
+    $mock->mock( 'pwd',       sub { return '/' } );
+    $mock->mock( '_list_cmd', sub { my ( $s, $cmd ) = @_; return $cmd eq 'MLSD' ? $listing : undef; } );
+    $mock->mock( 'message',   sub { return '' } );
+    $mock->mock( 'status',    sub { return 0 } );
+    $mock->mock( 'quit',      sub { return 1 } );
+    $mock->mock( 'abort',     sub { return 1 } );
     $mock->mock(
         'get',
         sub {

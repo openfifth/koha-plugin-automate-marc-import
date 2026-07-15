@@ -12,6 +12,12 @@ along with the comparison links — do not edit the heading or the links by hand
 
 ## [Unreleased]
 
+### Fixed
+- A directory whose name happens to match a supported MARC extension (e.g. a folder called `archive.mrc`) is no longer mistaken for a real file. All three `Koha::File::Transport` backends (FTP, Local, SFTP) now include directories in `list_files()` results, so only the transport's `type` field (not the filename) can tell them apart.
+
+### Changed
+- `_file_entry_size`/`_file_entry_mtime` no longer fall back to reading a `$filehash->{a}` SFTP Attributes object directly; `Koha::File::Transport::SFTP::list_files()` now always returns flat `size`/`mtime` fields like FTP and Local. Requires the Koha core fix for bug 43078 (unified `list_files()` shape across FTP/Local/SFTP, including directories and a `type` field) - currently only available on 25.11.o5th and above, ahead of its upstream release.
+
 ## [1.0.26] - 2026-07-13
 
 ## [1.0.25] - 2026-07-13
