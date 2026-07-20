@@ -12,6 +12,8 @@ along with the comparison links — do not edit the heading or the links by hand
 
 ## [Unreleased]
 
+## [1.0.27] - 2026-07-20
+
 ### Fixed
 - A directory whose name happens to match a supported MARC extension (e.g. a folder called `archive.mrc`) is no longer mistaken for a real file. All three `Koha::File::Transport` backends (FTP, Local, SFTP) now include directories in `list_files()` results, so only the transport's `type` field (not the filename) can tell them apart.
 
@@ -65,7 +67,8 @@ along with the comparison links — do not edit the heading or the links by hand
 - Comprehensive error logging and debugging support
 - Atomic database transactions ensuring data integrity
 
-[Unreleased]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.26...HEAD
+[Unreleased]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.27...HEAD
+[1.0.27]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.26...v1.0.27
 [1.0.26]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.25...v1.0.26
 [1.0.25]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.24...v1.0.25
 [1.0.24]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.23...v1.0.24
