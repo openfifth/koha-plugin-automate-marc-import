@@ -13,14 +13,17 @@ on:
   schedule:
     - cron: "0 6 1,15 * *"
 
+env:
+  # This plugin depends on backports only present in OpenFifth's Koha fork
+  # (not yet in Koha main or any community release) — see CHANGELOG.md.
+  KOHA_REPO: https://github.com/openfifth/koha.git
+  KOHA_BRANCH: 25.11.o5th
+  KOHA_IMAGE: "25.11"
+
 jobs:
   unit_tests:
     name: Run unit tests
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        koha-version: [main, stable, oldstable]
 
     steps:
       - name: Checkout plugin code
@@ -28,25 +31,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get Koha Version Branch Name
-        id: koha-version
-        uses: "bywatersolutions/github-action-koha-get-version-by-label@v2"
-        with:
-          version-label: "${{ matrix.koha-version }}"
-
       - name: Set up environment variables
         run: |
           IFS='/' read -r -a parts <<< "$GITHUB_REPOSITORY"
           GITHUB_REPO="${parts[1]}"
           echo "GITHUB_REPO=$GITHUB_REPO" >> $GITHUB_ENV
-          echo "KOHA_BRANCH=${{ steps.koha-version.outputs.current-branch-name }}" >> $GITHUB_ENV
           echo "PLUGINS_DIR=$(pwd)/.." >> $GITHUB_ENV
           echo "SYNC_REPO=$(pwd)/../kohaclone" >> $GITHUB_ENV
 
       - name: Check out Koha
         run: |
           cd ..
-          git clone --branch ${{ env.KOHA_BRANCH }} --single-branch --depth 1 https://github.com/Koha-Community/Koha.git kohaclone
+          git clone --branch ${{ env.KOHA_BRANCH }} --single-branch --depth 1 ${{ env.KOHA_REPO }} kohaclone
 
       - name: Install koha-testing-docker
         run: |
@@ -63,12 +59,7 @@ jobs:
           export LOCAL_USER_ID=$(id -u)
           export KTD_HOME=$(pwd)
           export SKIP_L10N=yes
-          # Use version-major-minor but handle main branch case
-          if [ "${{ matrix.koha-version }}" = "main" ]; then
-            export KOHA_IMAGE=main
-          else
-            export KOHA_IMAGE=${{ steps.koha-version.outputs.version-major-minor }}
-          fi
+          export KOHA_IMAGE=${{ env.KOHA_IMAGE }}
           ktd --name template --plugins up -d
 
       - name: Wait for KTD to be ready
@@ -98,7 +89,7 @@ jobs:
         with:
           files: |
             junit.xml
-          check_name: "Test Results (Koha ${{ matrix.koha-version }})"
+          check_name: "Test Results (Koha ${{ env.KOHA_BRANCH }})"
 
       - name: Show logs on failure
         if: failure()
@@ -140,12 +131,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get Koha Version Branch Name
-        id: koha-version-oldstable
-        uses: "bywatersolutions/github-action-koha-get-version-by-label@v2"
-        with:
-          version-label: "oldstable"
-
       - name: Read package.json
         id: package
         run: |
@@ -157,7 +142,7 @@ jobs:
         with:
           release-version: ${{ github.ref_name }}
           release-name: ${{ github.event.repository.name }}
-          minimum-version: ${{ steps.koha-version-oldstable.outputs.version-major-minor }}
+          minimum-version: ${{ env.KOHA_IMAGE }}
           plugin-module: ${{ steps.package.outputs.plugin_path }}
 
       - name: Create Release
