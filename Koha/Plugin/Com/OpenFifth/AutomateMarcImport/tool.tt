@@ -309,7 +309,7 @@
                             </table>
                         </div>
                         <div class="alert alert-info">
-                            <p><strong>Note:</strong> Settings with no filename patterns act as the default for that server (and download directory, if overridden), applying to any files that don't match a more specific setting.</p>
+                            <p><strong>Note:</strong> Settings with no filename patterns act as the default for their server and download directory combination (the directory may be overridden per setting), applying to any files that don't match a more specific setting.</p>
                         </div>
                     [% END %]
                 [% END %]
