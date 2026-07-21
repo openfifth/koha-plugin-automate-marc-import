@@ -29,3 +29,6 @@ coverage/
 
 # Plugin specific
 koha-plugin-*.kpz
+
+# Local-only design/planning notes (kept on disk for reference, not tracked)
+docs/superpowers/
