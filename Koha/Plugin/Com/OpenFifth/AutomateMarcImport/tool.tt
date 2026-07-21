@@ -68,32 +68,46 @@
                         </fieldset>
                         <fieldset class="rows">
                             <legend>Transport settings</legend>
-                            <label for="selected_transport_id" class="required">Transport name: </label>
-                            [% IF available_transport.count %]
-                            <select name="selected_transport_id" id="selected_transport_id" class="select2 required" required="required">
-                                <option value="">-- Select a transport --</option>
-                                [% FOREACH transport IN available_transport %]
-                                    <option value="[% transport.id %]"[% IF selected_transport_id == transport.id %] selected="selected"[% END %]>[% transport.name %]</option>
-                                [% END %]
-                            </select>
-                            [% END %]
-                            <span class="required">Required</span>
                             <div class="alert alert-info">
                                 <p><strong>What is a transport?</strong> A transport defines the connection details for a remote server where your MARC files are stored (e.g., a vendor's FTP or SFTP server).</p>
                                 [% IF available_transport.count %]
-                                <p>Can't find the server you need? <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">Add a new transport</a>.</p>
+                                <p>Can't find the server you need? <a href="/cgi-bin/koha/admin/file_transports.pl?op=add_form">Add a new transport</a>.</p>
                                 [% ELSE %]
-                                <p>No transports have been configured yet. <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">Add your first transport</a> to get started.</p>
+                                <p>No transports have been configured yet. <a href="/cgi-bin/koha/admin/file_transports.pl?op=add_form">Add your first transport</a> to get started.</p>
                                 [% END %]
                             </div>
-                            <label for="download_directory">Download directory: </label>
-                            <input type="text" name="download_directory" id="download_directory" size="50" maxlength="500" value="[% download_directory | html %]" placeholder="" />
-                            <div class="hint">
-                                Optional. Overrides the download directory configured on the transport above, for this setting only. Leave blank to use the transport's own download directory, shown as placeholder text once a transport is selected.
-                            </div>
+                            <ol>
+                                <li>
+                                    <label for="selected_transport_id" class="required">Transport name: </label>
+                                    [% IF available_transport.count %]
+                                    <select name="selected_transport_id" id="selected_transport_id" class="select2 required" required="required">
+                                        <option value="">-- Select a transport --</option>
+                                        [% FOREACH transport IN available_transport %]
+                                            <option value="[% transport.id %]"[% IF selected_transport_id == transport.id %] selected="selected"[% END %]>[% transport.name %]</option>
+                                        [% END %]
+                                    </select>
+                                    [% END %]
+                                    <span class="required">Required</span>
+                                </li>
+                                <li>
+                                    <label for="download_directory">Download directory: </label>
+                                    <input type="text" name="download_directory" id="download_directory" size="50" maxlength="500" value="[% download_directory | html %]" placeholder="" />
+                                    <div class="hint">
+                                        Optional. Overrides the download directory configured on the transport above, for this setting only. Leave blank to use the transport's own download directory, shown as placeholder text once a transport is selected.
+                                    </div>
+                                </li>
+                            </ol>
                         </fieldset>
                         <fieldset class="rows">
                             <legend>Import profile</legend>
+                            <div class="alert alert-info">
+                                <p><strong>What is an import profile?</strong> An import profile defines how MARC records should be processed: character encoding, record matching rules, and what to do with matching or non-matching records.</p>
+                                [% IF available_profiles.count %]
+                                <p>Can't find the profile you need? Create one by going to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">Stage MARC records for import</a> and saving a new profile.</p>
+                                [% ELSE %]
+                                <p>No import profiles exist yet. Create one by going to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">Stage MARC records for import</a> and saving a profile.</p>
+                                [% END %]
+                            </div>
                             <div class="row">
                                 <div class="col-sm-6">
                                     <label for="profile_id" class="required">Profile name: </label>
@@ -160,17 +174,12 @@
                                     </table>
                                 </div>
                             </div>
-                            <div class="alert alert-info">
-                                <p><strong>What is an import profile?</strong> An import profile defines how MARC records should be processed: character encoding, record matching rules, and what to do with matching or non-matching records.</p>
-                                [% IF available_profiles.count %]
-                                <p>Can't find the profile you need? Create one by going to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">Stage MARC records for import</a> and saving a new profile.</p>
-                                [% ELSE %]
-                                <p>No import profiles exist yet. Create one by going to <a href="/cgi-bin/koha/tools/stage-marc-import.pl">Stage MARC records for import</a> and saving a profile.</p>
-                                [% END %]
-                            </div>
                         </fieldset>
                         <fieldset class="rows">
                             <legend>File matching</legend>
+                            <div class="alert alert-info">
+                                <p><strong>Tip:</strong> Leave this field empty to make this profile the default for all files from this server that don't match any other setting.</p>
+                            </div>
                             <label for="filenames">Filename patterns (one per line): </label>
                             <textarea name="filenames">[% filenames | html %]</textarea>
                             <div class="hint">
@@ -178,9 +187,6 @@
                             </div>
                             <div class="hint">
                                 Matching is case-insensitive. You don't need to include file extensions.
-                            </div>
-                            <div class="alert alert-info">
-                                <p><strong>Tip:</strong> Leave this field empty to make this profile the default for all files from this server that don't match any other setting.</p>
                             </div>
                         </fieldset>
                         <fieldset class="rows">
