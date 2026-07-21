@@ -67,7 +67,7 @@
                             </ol>
                         </fieldset>
                         <fieldset class="rows">
-                            <legend>Transport ((S)FTP server)</legend>
+                            <legend>Transport settings</legend>
                             <label for="selected_transport_id" class="required">Transport name: </label>
                             [% IF available_transport.count %]
                             <select name="selected_transport_id" id="selected_transport_id" class="select2 required" required="required">
@@ -85,6 +85,11 @@
                                 [% ELSE %]
                                 <p>No transports have been configured yet. <a href="/cgi-bin/koha/admin/sftp_servers.pl?op=add_form">Add your first transport</a> to get started.</p>
                                 [% END %]
+                            </div>
+                            <label for="download_directory">Download directory: </label>
+                            <input type="text" name="download_directory" id="download_directory" size="50" maxlength="500" value="[% download_directory | html %]" placeholder="" />
+                            <div class="hint">
+                                Optional. Overrides the download directory configured on the transport above, for this setting only. Leave blank to use the transport's own download directory, shown as placeholder text once a transport is selected.
                             </div>
                         </fieldset>
                         <fieldset class="rows">
@@ -350,6 +355,18 @@
                 let profilesById = {};
                 let templateNames = {};
                 let matcherNames = {};
+                const transportDownloadDirs = getTransportDownloadDirs();
+
+                function updateDownloadDirectoryPlaceholder() {
+                    const transportId = $('#selected_transport_id').val();
+                    const directory = transportId ? (transportDownloadDirs[transportId] || '') : '';
+                    $('#download_directory').attr('placeholder', directory);
+                }
+
+                updateDownloadDirectoryPlaceholder();
+                setTimeout(function() {
+                    $('#selected_transport_id').on('select2:select select2:clear change', updateDownloadDirectoryPlaceholder);
+                }, 0);
 
                 // Fetch all required data in parallel
                 Promise.all([
@@ -417,7 +434,15 @@
                 ];
                 return Promise.resolve(matchers);
             }
-            
+
+            const getTransportDownloadDirs = () => {
+                const dirs = {};
+                [% FOREACH transport IN available_transport %]
+                dirs[[% transport.id %]] = "[% transport.download_directory | replace('"', '\\"') %]";
+                [% END %]
+                return dirs;
+            }
+
             // Add form validation using jQuery Validate (Koha standard)
             $(document).ready(function(){
                 // Only apply validation on the add form
