@@ -93,6 +93,7 @@ sub tool {
                 auto_commit => $cgi->param('auto_commit'),
                 framework => $cgi->param('framework'),
                 overlay_framework => $cgi->param('overlay_framework'),
+                download_directory => $cgi->param('download_directory'),
                 available_profiles => Koha::ImportBatchProfiles->search(),
                 available_transport => Koha::File::Transports->search(),
                 available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
@@ -131,6 +132,7 @@ sub tool {
             auto_commit => $setting_data->{auto_commit},
             framework => $setting_data->{framework},
             overlay_framework => $setting_data->{overlay_framework},
+            download_directory => $setting_data->{download_directory},
             available_profiles => Koha::ImportBatchProfiles->search(),
             available_transport => Koha::File::Transports->search(),
             available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
@@ -561,6 +563,7 @@ sub _validate_cgi_params {
     my $auto_commit = $cgi->param('auto_commit') // 0;
     my $framework = $cgi->param('framework') // '';
     my $overlay_framework = $cgi->param('overlay_framework') // '';
+    my $download_directory = $cgi->param('download_directory') // '';
 
     # Validate name (required, max 100 chars)
     $name =~ s/^\s+|\s+$//g;  # trim whitespace
@@ -611,6 +614,9 @@ sub _validate_cgi_params {
     # Sanitize filenames
     my $sanitized_filenames = $self->_sanitize_filenames($filenames);
 
+    # Sanitize download directory override (light-touch: it's a real remote path)
+    my $sanitized_download_directory = $self->_sanitize_download_directory($download_directory);
+
     # Validate auto_commit is boolean
     $auto_commit = $auto_commit ? 1 : 0;
 
@@ -635,30 +641,51 @@ sub _validate_cgi_params {
             auto_commit => $auto_commit,
             framework => $framework,
             overlay_framework => $overlay_framework,
+            download_directory => $sanitized_download_directory,
         }
     };
 }
 
 sub _sanitize_filenames {
     my ( $self, $filenames ) = @_;
-    
+
     return '' unless defined $filenames;
-    
+
     # Convert to lowercase
     $filenames = lc($filenames);
-    
+
     # Remove dangerous characters (path separators, null bytes, control chars)
     $filenames =~ s/[\/\\:\0\x00-\x1f\x7f-\x9f]//g;
-    
+
     # Limit length to prevent DoS
     if (length($filenames) > 1000) {
         $filenames = substr($filenames, 0, 1000);
     }
-    
+
     # Trim whitespace
     $filenames =~ s/^\s+|\s+$//g;
-    
+
     return $filenames;
+}
+
+sub _sanitize_download_directory {
+    my ( $self, $directory ) = @_;
+
+    return '' unless defined $directory;
+
+    # Remove null bytes and control characters. Unlike _sanitize_filenames,
+    # this is a real remote path, so slashes/colons/case are preserved.
+    $directory =~ s/[\0\x00-\x1f\x7f-\x9f]//g;
+
+    # Trim leading/trailing whitespace
+    $directory =~ s/^\s+|\s+$//g;
+
+    # Limit length to prevent unbounded storage
+    if (length($directory) > 500) {
+        $directory = substr($directory, 0, 500);
+    }
+
+    return $directory;
 }
 
 sub _save_setting {
@@ -702,6 +729,7 @@ sub _save_setting {
         auto_commit => $validation_result->{data}->{auto_commit},
         framework => $validation_result->{data}->{framework},
         overlay_framework => $validation_result->{data}->{overlay_framework},
+        download_directory => $validation_result->{data}->{download_directory},
     );
 
     eval {
