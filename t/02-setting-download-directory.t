@@ -2,7 +2,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 2;
+use Test::More tests => 3;
 
 use JSON qw(decode_json);
 use CGI;
@@ -128,6 +128,55 @@ subtest 'download_directory defaults to empty string when omitted' => sub {
     my $stored     = decode_json( $plugin->retrieve_data($setting_id) );
 
     is( $stored->{download_directory}, '', 'download_directory defaults to empty string' );
+
+    $schema->storage->txn_rollback;
+};
+
+subtest 'settings list exposes both the override and the transport default' => sub {
+    plan tests => 2;
+
+    $schema->storage->txn_begin;
+
+    my $transport = $builder->build_object({
+        class => 'Koha::File::Transports',
+        value => {
+            transport           => 'sftp',
+            host                => 'localhost',
+            port                => 22,
+            user_name           => 'testuser',
+            password            => undef,
+            key_file            => undef,
+            download_directory  => '/default/incoming',
+            upload_directory    => '',
+            passive             => 1,
+        },
+    });
+    my $profile = $builder->build_object({
+        class => 'Koha::ImportBatchProfiles',
+        value => { name => 'Test profile for list display' },
+    });
+
+    my $plugin = Koha::Plugin::Com::OpenFifth::AutomateMarcImport->new( { enable_plugins => 1 } );
+    my $transport_id = $transport->get_column( $plugin->{transport_column_name} );
+
+    my $cgi = CGI->new({
+        name                  => 'Vendor D',
+        description           => '',
+        selected_transport_id => $transport_id,
+        profile_id            => $profile->id,
+        filenames             => '',
+        auto_commit           => 0,
+        framework             => '',
+        overlay_framework     => '',
+        download_directory    => '/vendor/incoming',
+    });
+    $plugin->_save_setting($cgi);
+
+    my @settings = $plugin->_get_settings_for_display();
+    my ($setting) = grep { $_->{name} eq 'Vendor D' } @settings;
+
+    is( $setting->{download_directory}, '/vendor/incoming', 'override is exposed for display' );
+    is( $setting->{transport_download_directory}, '/default/incoming', "transport's own directory is exposed for display" );
 
     $schema->storage->txn_rollback;
 };

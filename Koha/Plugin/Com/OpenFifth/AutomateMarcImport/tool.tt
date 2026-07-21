@@ -255,6 +255,7 @@
                                         <th>Name</th>
                                         <th>Description</th>
                                         <th>Server</th>
+                                        <th>Download directory</th>
                                         <th>Filename patterns</th>
                                         <th>Profile</th>
                                         <th>Auto-commit</th>
@@ -277,6 +278,7 @@
                                             <td id="name_[% setting.id %]"><strong>[% setting.name | html %]</strong></td>
                                             <td id="description_[% setting.id %]">[% IF setting.description %][% setting.description | html %][% ELSE %]<em>(none)</em>[% END %]</td>
                                             <td id="transport_name_[% setting.id %]">[% setting.transport_name %]</td>
+                                            <td id="download_directory_[% setting.id %]">[% IF setting.download_directory %][% setting.download_directory | html %][% ELSE %]<em>[% setting.transport_download_directory | html %] (default)</em>[% END %]</td>
                                             <td id="filenames_[% setting.id %]">[% IF setting.filenames %][% setting.filenames | html | html_line_break %][% ELSE %]<em>(default)</em>[% END %]</td>
                                             <td id="profile_name_[% setting.id %]">[% setting.profile_name %]</td>
                                             <td id="auto_commit_[% setting.id %]">[% IF setting.auto_commit %]Yes[% ELSE %]No[% END %]</td>
@@ -307,7 +309,7 @@
                             </table>
                         </div>
                         <div class="alert alert-info">
-                            <p><strong>Note:</strong> Settings with no filename patterns act as the default for that server, applying to any files that don't match a more specific setting.</p>
+                            <p><strong>Note:</strong> Settings with no filename patterns act as the default for that server (and download directory, if overridden), applying to any files that don't match a more specific setting.</p>
                         </div>
                     [% END %]
                 [% END %]

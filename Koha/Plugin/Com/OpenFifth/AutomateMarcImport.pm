@@ -504,6 +504,8 @@ sub _get_settings_for_display {
             description => $setting_data->{description} // '',
             transport_id => $transport->get_column($self->{transport_column_name}),
             transport_name => $transport->get_column('name'),
+            download_directory => $setting_data->{download_directory} // '',
+            transport_download_directory => $transport->get_column('download_directory') // '',
             profile_name => $profile->get_column('name'),
             profile_comment => $profile->get_column('comments'),
             profile_record_type => $profile->get_column('record_type'),
