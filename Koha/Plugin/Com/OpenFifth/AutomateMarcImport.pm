@@ -194,7 +194,11 @@ sub cronjob_nightly {
     # Ensure required directories exist
     $self->_ensure_plugin_directories();
 
-    foreach my $transport_id ( $self->_get_selected_transport_ids() ) {
+    foreach my $group ( $self->_get_transport_directory_groups() ) {
+        my $transport_id = $group->{transport_id};
+        my $directory    = $group->{directory};
+        my $setting_ids  = $group->{setting_ids};
+
         my $transport = Koha::File::Transports->find($transport_id);
         if (!$transport) {
             $self->{logger}->error("Transport with ID $transport_id not found, skipping");
@@ -203,8 +207,8 @@ sub cronjob_nightly {
 
         my $transport_name = $transport->name || "Transport $transport_id";
 
-        # Check download directory is configured
-        if (!defined $transport->download_directory || $transport->download_directory eq '') {
+        # Check a download directory is configured (transport default or setting override)
+        if ($directory eq '') {
             $self->{logger}->error("Transport '$transport_name' does not have a download directory set, skipping");
             next;
         }
@@ -215,8 +219,8 @@ sub cronjob_nightly {
         }
         $self->{logger}->info("Connected to transport '$transport_name'");
 
-        unless ( $self->_call_transport( $transport, 'change_directory', $transport->download_directory ) ) {
-            $self->{logger}->error("Failed to change to download directory for transport '$transport_name': " . $self->_transport_error($transport));
+        unless ( $self->_call_transport( $transport, 'change_directory', $directory ) ) {
+            $self->{logger}->error("Failed to change to download directory '$directory' for transport '$transport_name': " . $self->_transport_error($transport));
             next;
         }
 
@@ -248,7 +252,7 @@ sub cronjob_nightly {
 
             # Get setting data early so we can use setting_id for archive paths
             my @split_filename = split(/\./, $filename );
-            my $setting_data = $self->_get_setting_by_filename($transport_id, $split_filename[0]);
+            my $setting_data = $self->_get_setting_by_filename($setting_ids, $split_filename[0]);
             my $setting_id = $setting_data->{id};
             my $profile_id = $setting_data->{profile_id};
             my $auto_commit = $setting_data->{auto_commit} // 0;
@@ -368,19 +372,37 @@ sub _delete_setting {
     # FIXME: also store a list of archived settings ids?
 }
  
-sub _get_selected_transport_ids {
+sub _get_transport_directory_groups {
     my ( $self ) = @_;
-    my @selected_transport_ids;
 
-    foreach my $setting_id (split(',', $self->retrieve_data( 'selected_setting_ids' ))) {
-        my $setting_data = decode_json($self->retrieve_data( $setting_id ));
-        # skip duplicates
-        if ( grep  { $_ == $setting_data->{transport_id}} @selected_transport_ids ) {
-            next;
+    my %groups;    # "$transport_id\0$directory" => { transport_id, directory, setting_ids => [] }
+    my %transport_cache;
+
+    foreach my $setting_id ( split( ',', $self->retrieve_data('selected_setting_ids') // '' ) ) {
+        next if $setting_id eq '';
+        my $setting_data = decode_json( $self->retrieve_data($setting_id) );
+        my $transport_id = $setting_data->{transport_id};
+        next unless defined $transport_id;
+
+        my $directory = $setting_data->{download_directory};
+        $directory = '' unless defined $directory;
+
+        if ( $directory eq '' ) {
+            my $transport = $transport_cache{$transport_id} //= Koha::File::Transports->find($transport_id);
+            next unless $transport;
+            $directory = $transport->download_directory // '';
         }
-        push @selected_transport_ids, $setting_data->{transport_id};
+
+        my $key = "$transport_id\0$directory";
+        $groups{$key} //= {
+            transport_id => $transport_id,
+            directory    => $directory,
+            setting_ids  => [],
+        };
+        push @{ $groups{$key}{setting_ids} }, $setting_id;
     }
-    return @selected_transport_ids;
+
+    return values %groups;
 }
 
 sub _call_transport {
@@ -439,37 +461,39 @@ sub _file_entry_mtime {
 sub _get_profile_id_by_filename {
     my ( $self, $transport_id, $filename ) = @_;
 
-    my $setting_data = $self->_get_setting_by_filename($transport_id, $filename);
+    my @setting_ids = grep {
+        my $setting_data = decode_json( $self->retrieve_data($_) );
+        $setting_data->{transport_id} == $transport_id;
+    } split( ',', $self->retrieve_data('selected_setting_ids') // '' );
+
+    my $setting_data = $self->_get_setting_by_filename( \@setting_ids, $filename );
     return $setting_data->{profile_id};
 }
 
 sub _get_setting_by_filename {
-    my ( $self, $transport_id, $filename ) = @_;
+    my ( $self, $setting_ids, $filename ) = @_;
 
-    my $default_setting_for_transport;
+    my $default_setting;
     my $lc_filename = lc( $filename );
 
-    foreach my $setting_id (split(',', $self->retrieve_data( 'selected_setting_ids' ))) {
-        my $setting_data = decode_json($self->retrieve_data( $setting_id ));
-        if ( $transport_id != $setting_data->{transport_id} ) {
-            next;
-        }
+    foreach my $setting_id ( @{$setting_ids} ) {
+        my $setting_data = decode_json( $self->retrieve_data($setting_id) );
 
-        if ( !defined $setting_data->{filenames} || $setting_data->{filenames} eq  "") {
-            $default_setting_for_transport = $setting_data;
+        if ( !defined $setting_data->{filenames} || $setting_data->{filenames} eq "" ) {
+            $default_setting = $setting_data;
             next;
         }
 
         # Check if filename contains any of the line-delimited patterns
-        foreach my $pattern (split(/\r?\n/, $setting_data->{filenames})) {
-            $pattern =~ s/^\s+|\s+$//g;  # trim whitespace
+        foreach my $pattern ( split( /\r?\n/, $setting_data->{filenames} ) ) {
+            $pattern =~ s/^\s+|\s+$//g;    # trim whitespace
             next if $pattern eq '';
-            if ( index($lc_filename, lc($pattern)) != -1 ) {
+            if ( index( $lc_filename, lc($pattern) ) != -1 ) {
                 return $setting_data;
             }
         }
     }
-    return $default_setting_for_transport;
+    return $default_setting;
 }
 
 sub _get_settings_for_display {

@@ -2,7 +2,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 5;
+use Test::More tests => 6;
 use Test::MockModule;
 
 use File::Temp qw(tempdir);
@@ -200,6 +200,44 @@ subtest 'transport that dies on connect skips transport without dying' => sub {
     $schema->storage->txn_rollback;
 };
 
+subtest 'settings with different directory overrides on the same transport are fetched separately' => sub {
+    plan tests => 5;
+
+    $schema->storage->txn_begin;
+
+    my $base_dir = tempdir( CLEANUP => 1 );
+    my $dir_a    = "$base_dir/vendor_a";
+    my $dir_b    = "$base_dir/vendor_b";
+    mkdir $dir_a or die "Cannot create $dir_a: $!";
+    mkdir $dir_b or die "Cannot create $dir_b: $!";
+    write_file( "$dir_a/alpha.mrc", $MARC_CONTENT );
+    write_file( "$dir_b/beta.mrc",  $MARC_CONTENT );
+
+    # The transport's own directory is $dir_a; the second setting overrides to $dir_b
+    my $transport = build_transport( 'local', $dir_a );
+    my $plugin    = build_plugin_with_two_settings(
+        $transport,
+        { id => 1, profile_id => 111, download_directory => '' },        # uses the transport's own directory
+        { id => 2, profile_id => 222, download_directory => $dir_b },    # overrides to a different directory
+    );
+
+    @staged = ();
+    $plugin->cronjob_nightly();
+
+    is( scalar @staged, 2, 'both directories were visited and both files staged' );
+
+    my ($alpha) = grep { $_->{filename} eq 'alpha.mrc' } @staged;
+    my ($beta)  = grep { $_->{filename} eq 'beta.mrc' } @staged;
+
+    ok( $alpha, 'file from the transport-default directory was staged' );
+    is( $alpha->{profile_id}, 111, 'default-directory file matched the setting with no override' );
+
+    ok( $beta, 'file from the overridden directory was staged' );
+    is( $beta->{profile_id}, 222, 'overridden-directory file matched the setting that owns that directory' );
+
+    $schema->storage->txn_rollback;
+};
+
 sub build_transport {
     my ( $type, $download_directory ) = @_;
 
@@ -247,6 +285,41 @@ sub build_plugin_with_setting {
             ),
         }
     );
+
+    return $plugin;
+}
+
+sub build_plugin_with_two_settings {
+    my ( $transport, @settings ) = @_;
+
+    my $plugin = Koha::Plugin::Com::OpenFifth::AutomateMarcImport->new( { enable_plugins => 1 } );
+    $plugin->{plugindir} = tempdir( CLEANUP => 1 );
+
+    my $transport_id = $transport->get_column( $plugin->{transport_column_name} );
+
+    my $data_to_store = {
+        selected_setting_ids => join( ',', map { $_->{id} } @settings ) . ',',
+        last_setting_id      => $settings[-1]->{id},
+    };
+
+    foreach my $setting (@settings) {
+        $data_to_store->{ $setting->{id} } = encode_json(
+            {
+                id                 => $setting->{id},
+                name               => "Test setting $setting->{id}",
+                description        => '',
+                transport_id       => $transport_id,
+                profile_id         => $setting->{profile_id},
+                filenames          => '',
+                auto_commit        => 0,
+                framework          => '',
+                overlay_framework  => '',
+                download_directory => $setting->{download_directory},
+            }
+        );
+    }
+
+    $plugin->store_data($data_to_store);
 
     return $plugin;
 }
