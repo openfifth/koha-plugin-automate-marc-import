@@ -28,7 +28,7 @@ use Koha::ImportBatchProfiles;
 use Koha::Logger;
 use Koha::UploadedFile;
 
-our $VERSION         = '1.2.1';
+our $VERSION         = '1.3.0';
 
 our $metadata = {
     name            => 'Automate Marc Import',

@@ -12,6 +12,8 @@ along with the comparison links — do not edit the heading or the links by hand
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-21
+
 ## [1.2.1] - 2026-07-21
 
 ## [1.2.0] - 2026-07-21
@@ -75,7 +77,8 @@ along with the comparison links — do not edit the heading or the links by hand
 - Comprehensive error logging and debugging support
 - Atomic database transactions ensuring data integrity
 
-[Unreleased]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.0.28...v1.1.0
