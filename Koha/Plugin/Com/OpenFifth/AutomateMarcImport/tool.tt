@@ -524,6 +524,73 @@
                         $('#framework_options').hide();
                     }
                 });
+
+                // New import profile modal
+                function resetNewProfileForm() {
+                    $('#new_profile_name').val('');
+                    $('#new_profile_comments').val('');
+                    $('#new_profile_record_type').val('biblio');
+                    $('#new_profile_encoding').val('UTF-8');
+                    $('#new_profile_format').val('ISO2709');
+                    $('#new_profile_matcher_id').val('');
+                    $('#new_profile_template_id').val('');
+                    $('#new_profile_overlay_action').val('replace');
+                    $('#new_profile_nomatch_action').val('create_new');
+                    $('#new_profile_item_action').val('always_add');
+                    $('#new_profile_parse_items_yes').prop('checked', true);
+                    $('#new_profile_save').prop('disabled', true);
+                    $('#new_profile_error').hide().text('');
+                }
+
+                $('#new_profile_modal').on('hidden.bs.modal', resetNewProfileForm);
+
+                $('#new_profile_name').on('input', function() {
+                    $('#new_profile_save').prop('disabled', $(this).val().trim() === '');
+                });
+
+                $('#new_profile_save').on('click', function() {
+                    const parseItemsValue = $('input[name="new_profile_parse_items"]:checked').val();
+                    const body = {
+                        name: $('#new_profile_name').val().trim(),
+                        comments: $('#new_profile_comments').val() || null,
+                        record_type: $('#new_profile_record_type').val() || null,
+                        encoding: $('#new_profile_encoding').val() || null,
+                        format: $('#new_profile_format').val() || null,
+                        matcher_id: $('#new_profile_matcher_id').val() || null,
+                        template_id: $('#new_profile_template_id').val() || null,
+                        overlay_action: $('#new_profile_overlay_action').val() || null,
+                        nomatch_action: $('#new_profile_nomatch_action').val() || null,
+                        item_action: $('#new_profile_item_action').val() || null,
+                        parse_items: parseItemsValue === '1',
+                    };
+
+                    $('#new_profile_error').hide().text('');
+                    $('#new_profile_save').prop('disabled', true);
+
+                    $.ajax({
+                        url: '/api/v1/import_batch_profiles',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(body)
+                    }).then(function(createdProfile) {
+                        return getProfiles().then(function(profiles) {
+                            profilesById = {};
+                            profiles.forEach(function(p) {
+                                profilesById[String(p.profile_id)] = p;
+                            });
+
+                            $('#profile_id option[value="' + createdProfile.profile_id + '"]').remove();
+                            $('#profile_id').append(new Option(createdProfile.name, createdProfile.profile_id));
+                            $('#profile_id').val(createdProfile.profile_id).trigger('change');
+
+                            $('#new_profile_modal').modal('hide');
+                        });
+                    }).catch(function(jqXHR) {
+                        const message = (jqXHR.responseJSON && jqXHR.responseJSON.error) || 'Failed to save profile.';
+                        $('#new_profile_error').text(message).show();
+                        $('#new_profile_save').prop('disabled', false);
+                    });
+                });
             })
 
             const getProfiles = () => {
