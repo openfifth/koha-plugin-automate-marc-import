@@ -262,18 +262,6 @@ sub cronjob_nightly {
             # Ensure per-setting archive directory exists
             $self->_ensure_plugin_directories($setting_id);
 
-            # Check if file has already been processed (MD5 deduplication)
-            if (!$self->_should_process_file($filename, $setting_id)) {
-                $self->{logger}->info("File '$filename' has already been processed (MD5 match), skipping");
-                next;
-            }
-
-            # Check if file was already imported (database check)
-            if ($self->_was_already_imported($filename)) {
-                $self->{logger}->info("File '$filename' was already imported (found in import_batches), skipping");
-                next;
-            }
-
             # Use MD5 hash of filename for unique local storage path
             my $file_hashvalue = Digest::MD5::md5_hex($filename);
             my $localFile = Koha::UploadedFile->new({
@@ -295,18 +283,50 @@ sub cronjob_nightly {
             }
             $self->{logger}->info("Downloaded file '$filename' from transport '$transport_name'");
 
+            my $content_hash = $self->_hash_file( $localFile->full_path() );
+
+            # Only successful imports are deduplicated by content hash — a
+            # filename whose last attempt failed is always retried, even with
+            # identical content, so a permanently-broken file keeps being
+            # logged rather than silently swallowed after the first failure.
+            if ( defined $content_hash ) {
+                my $last_success_hash = $self->_get_last_successful_hash( $setting_id, $filename );
+                if ( defined $last_success_hash && $last_success_hash eq $content_hash ) {
+                    $self->{logger}->info("File '$filename' is unchanged since its last successful import, skipping");
+                    unlink $localFile->full_path() if -f $localFile->full_path();
+                    next;
+                }
+            }
+            my $file_hash_for_log = $content_hash // '';
+
             my $batch_id = try {
                 $self->_stage($localFile->full_path(), $filename, $profile_id, $auto_commit, $framework, $overlay_framework);
             } catch {
                 $self->{logger}->error("Failed to stage file '$filename': $_");
-                unlink $localFile->full_path() if -f $localFile->full_path();
+                $self->_log_attempt(
+                    setting_id    => $setting_id,
+                    filename      => $filename,
+                    file_hash     => $file_hash_for_log,
+                    outcome       => 'failure',
+                    batch_id      => undef,
+                    error_message => "$_",
+                );
+                $self->_archive_file( $localFile->full_path(), $filename, $setting_id, 'failure' );
                 undef;
             };
             next unless defined $batch_id;
 
             my $action = $auto_commit ? "staged and imported" : "staged";
             $self->{logger}->info("Successfully $action file '$filename' using profile ID $profile_id (batch $batch_id)");
-            $self->_archive_file($localFile->full_path(), $filename, $setting_id);
+            $self->_log_attempt(
+                setting_id    => $setting_id,
+                filename      => $filename,
+                file_hash     => $file_hash_for_log,
+                outcome       => 'success',
+                batch_id      => $batch_id,
+                error_message => undef,
+            );
+            $self->_archive_file($localFile->full_path(), $filename, $setting_id, 'success');
         }
     }
 }
@@ -1180,23 +1200,6 @@ sub _was_modified_since_last_fetch {
     return 1 unless defined $last_mod_time;
 
     return $last_mod_time > $last_run_time;
-}
-
-sub _was_already_imported {
-    my ( $self, $filename ) = @_;
-
-    my $dbh = C4::Context->dbh;
-
-    # Check if file was imported in the last 6 months
-    my $sql = q|
-        SELECT COUNT(*) FROM import_batches
-        WHERE file_name = ?
-        AND upload_timestamp > DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
-    |;
-
-    my $count = $dbh->selectrow_array($sql, undef, $filename);
-
-    return $count > 0;
 }
 
 #FIXME: do we need a logger subroutine to pass to BatchStageMarcRecords? If not: remove, and update _stage()

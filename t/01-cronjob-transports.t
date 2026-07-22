@@ -2,13 +2,14 @@
 
 use Modern::Perl;
 
-use Test::More tests => 6;
+use Test::More tests => 9;
 use Test::MockModule;
 
 use File::Temp qw(tempdir);
 use JSON       qw(encode_json);
 use POSIX      qw(strftime);
 
+use C4::Context;
 use Koha::Database;
 use Koha::File::Transports;
 
@@ -18,6 +19,8 @@ use Koha::Plugin::Com::OpenFifth::AutomateMarcImport;
 
 my $schema  = Koha::Database->new->schema;
 my $builder = t::lib::TestBuilder->new;
+
+Koha::Plugin::Com::OpenFifth::AutomateMarcImport->new( { enable_plugins => 1 } )->install();
 
 my $MARC_CONTENT = "00062nam a2200037 a 4500008004100000\x1e210101s2021    xx            000 0 eng d\x1e\x1d";
 
@@ -74,7 +77,7 @@ subtest 'local transport stages downloaded MARC files' => sub {
     is( $staged[0]->{filename},  'test.mrc',    'MARC file staged, non-MARC file skipped' );
     is( $staged[0]->{profile_id}, 999,          'profile id passed through from setting' );
     is( $staged[0]->{content},   $MARC_CONTENT, 'downloaded content matches remote file' );
-    ok( -f $plugin->{plugindir} . '/Archive/1/test.mrc', 'processed file archived per setting' );
+    ok( -f $plugin->{plugindir} . '/Archive/1/Success/test.mrc', 'processed file archived per setting' );
     ok( !-f $staged[0]->{path}, 'temporary download removed after archiving' );
 
     $schema->storage->txn_rollback;
@@ -121,7 +124,7 @@ subtest 'sftp transport stages downloaded MARC files' => sub {
     is( $staged[0]->{filename},  'vendor.mrc',  'MARC file staged, non-MARC file skipped' );
     is( $staged[0]->{profile_id}, 999,          'profile id passed through from setting' );
     is( $staged[0]->{content},   $MARC_CONTENT, 'downloaded content matches remote file' );
-    ok( -f $plugin->{plugindir} . '/Archive/1/vendor.mrc', 'processed file archived per setting' );
+    ok( -f $plugin->{plugindir} . '/Archive/1/Success/vendor.mrc', 'processed file archived per setting' );
 
     $schema->storage->txn_rollback;
 };
@@ -154,7 +157,7 @@ subtest 'ftp transport stages downloaded MARC files' => sub {
     is( $staged[0]->{filename},  'supplier.mrc', 'MARC file staged, non-MARC file skipped' );
     is( $staged[0]->{profile_id}, 999,           'profile id passed through from setting' );
     is( $staged[0]->{content},   $MARC_CONTENT,  'downloaded content matches remote file' );
-    ok( -f $plugin->{plugindir} . '/Archive/1/supplier.mrc', 'processed file archived per setting' );
+    ok( -f $plugin->{plugindir} . '/Archive/1/Success/supplier.mrc', 'processed file archived per setting' );
 
     $schema->storage->txn_rollback;
 };
@@ -234,6 +237,102 @@ subtest 'settings with different directory overrides on the same transport are f
 
     ok( $beta, 'file from the overridden directory was staged' );
     is( $beta->{profile_id}, 222, 'overridden-directory file matched the setting that owns that directory' );
+
+    $schema->storage->txn_rollback;
+};
+
+subtest 'unchanged content is skipped on the next run, no restage' => sub {
+    plan tests => 3;
+
+    $schema->storage->txn_begin;
+
+    my $remote_dir = tempdir( CLEANUP => 1 );
+    write_file( "$remote_dir/vendor.mrc", $MARC_CONTENT );
+
+    my $transport = build_transport( 'local', $remote_dir );
+    my $plugin    = build_plugin_with_setting($transport);
+
+    @staged = ();
+    $plugin->cronjob_nightly();
+    is( scalar @staged, 1, 'first run: file is staged' );
+
+    # Same content, same filename, second run.
+    @staged = ();
+    $plugin->cronjob_nightly();
+    is( scalar @staged, 0, 'second run: unchanged content is not staged again' );
+
+    my $table = $plugin->_log_table_name;
+    my ($count) = C4::Context->dbh->selectrow_array("SELECT COUNT(*) FROM $table WHERE outcome = 'success'");
+    is( $count, 1, 'only one success row was logged, not two' );
+
+    $schema->storage->txn_rollback;
+};
+
+subtest 'changed content under the same filename is re-staged' => sub {
+    plan tests => 2;
+
+    $schema->storage->txn_begin;
+
+    my $remote_dir = tempdir( CLEANUP => 1 );
+    write_file( "$remote_dir/vendor.mrc", $MARC_CONTENT );
+
+    my $transport = build_transport( 'local', $remote_dir );
+    my $plugin    = build_plugin_with_setting($transport);
+
+    @staged = ();
+    $plugin->cronjob_nightly();
+    is( scalar @staged, 1, 'first run: file is staged' );
+
+    # Overwrite with different content, same filename.
+    write_file( "$remote_dir/vendor.mrc", $MARC_CONTENT . "extra bytes to change the hash" );
+
+    @staged = ();
+    $plugin->cronjob_nightly();
+    is( scalar @staged, 1, 'second run: changed content under the same filename is staged again' );
+
+    $schema->storage->txn_rollback;
+};
+
+subtest 'a failed import is archived under Failed/, logged, and always retried' => sub {
+    plan tests => 5;
+
+    $schema->storage->txn_begin;
+
+    my $remote_dir = tempdir( CLEANUP => 1 );
+    write_file( "$remote_dir/broken.mrc", $MARC_CONTENT );
+
+    my $transport = build_transport( 'local', $remote_dir );
+    my $plugin    = build_plugin_with_setting($transport);
+
+    $mock_plugin->mock( '_stage', sub { die "simulated staging failure\n" } );
+
+    @staged = ();
+    $plugin->cronjob_nightly();
+    is( scalar @staged, 0, 'nothing recorded as staged when _stage dies' );
+    ok( -f $plugin->{plugindir} . '/Archive/1/Failed/broken.mrc', 'failed file archived under Failed/' );
+
+    my $table = $plugin->_log_table_name;
+    my ($failure_count) = C4::Context->dbh->selectrow_array("SELECT COUNT(*) FROM $table WHERE outcome = 'failure'");
+    is( $failure_count, 1, 'one failure row logged' );
+
+    # Same broken content, second run: must be retried, not skipped.
+    $plugin->cronjob_nightly();
+    my ($failure_count_after) = C4::Context->dbh->selectrow_array("SELECT COUNT(*) FROM $table WHERE outcome = 'failure'");
+    is( $failure_count_after, 2, 'a second identical failure is retried and logged again, not skipped' );
+
+    # Restore the working mock for any subtests that might run after this one.
+    $mock_plugin->mock(
+        '_stage',
+        sub {
+            my ( $self, $path, $filename, $profile_id, $auto_commit ) = @_;
+            push @staged, {
+                path => $path, filename => $filename, profile_id => $profile_id,
+                auto_commit => $auto_commit, content => slurp($path),
+            };
+            return 42;
+        }
+    );
+    ok( 1, 'mock restored for subsequent subtests' );
 
     $schema->storage->txn_rollback;
 };
