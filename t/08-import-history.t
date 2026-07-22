@@ -14,6 +14,17 @@ use Koha::Plugin::Com::OpenFifth::AutomateMarcImport;
 my $schema  = Koha::Database->new->schema;
 my $builder = t::lib::TestBuilder->new;
 
+sub cleanup_plugin_data {
+    my ( $plugin, @keys ) = @_;
+    my $dbh = C4::Context->dbh;
+    for my $key (@keys) {
+        $dbh->do(
+            "DELETE FROM plugin_data WHERE plugin_class = ? AND plugin_key = ?",
+            undef, ref($plugin), $key
+        );
+    }
+}
+
 subtest '_get_import_history resolves setting names, orders, and filters' => sub {
     plan tests => 6;
 
@@ -46,6 +57,8 @@ subtest '_get_import_history resolves setting names, orders, and filters' => sub
 
     my @setting_1 = $plugin->_get_import_history( setting_id => 1 );
     is( scalar @setting_1, 2, 'setting_id filter narrows to that setting only' );
+
+    cleanup_plugin_data( $plugin, '1', 'selected_setting_ids', 'last_setting_id' );
 
     $dbh->do("DROP TABLE IF EXISTS $table");
     $schema->storage->txn_rollback;

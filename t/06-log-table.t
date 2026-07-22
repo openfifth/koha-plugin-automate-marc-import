@@ -16,6 +16,17 @@ use Koha::Plugin::Com::OpenFifth::AutomateMarcImport;
 my $schema  = Koha::Database->new->schema;
 my $builder = t::lib::TestBuilder->new;
 
+sub cleanup_plugin_data {
+    my ( $plugin, @keys ) = @_;
+    my $dbh = C4::Context->dbh;
+    for my $key (@keys) {
+        $dbh->do(
+            "DELETE FROM plugin_data WHERE plugin_class = ? AND plugin_key = ?",
+            undef, ref($plugin), $key
+        );
+    }
+}
+
 subtest '_log_table_name returns the qualified, memoized table name' => sub {
     plan tests => 2;
 
@@ -141,6 +152,8 @@ subtest '_archive_file splits successes and failures into separate directories' 
     close $retry_success_src;
     $plugin->_archive_file( $retry_success_src->filename, 'flaky.mrc', 42, 'success' );
     ok( !-f $plugin->{plugindir} . '/Archive/42/Failed/flaky.mrc', 'stale Failed/ copy removed once flaky.mrc succeeds' );
+
+    cleanup_plugin_data( $plugin, 'archive_retention_count', 'archive_failed_retention_count' );
 };
 
 subtest '_apply_retention_policy prunes each directory independently' => sub {
