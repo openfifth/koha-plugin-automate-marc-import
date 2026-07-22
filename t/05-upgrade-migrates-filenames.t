@@ -2,8 +2,10 @@
 
 use Modern::Perl;
 
-use Test::More tests => 4;
+use Test::More tests => 5;
 
+use File::Path qw(make_path);
+use File::Temp;
 use JSON qw(decode_json encode_json);
 
 use Koha::Database;
@@ -165,6 +167,37 @@ subtest 'upgrade leaves a blank/default filenames field untouched' => sub {
 
     my $stored = decode_json( $plugin->retrieve_data('1') );
     is( $stored->{filenames}, '', 'blank filenames field remains blank' );
+
+    $schema->storage->txn_rollback;
+};
+
+subtest 'upgrade moves loose archived files into Success/, idempotently' => sub {
+    plan tests => 4;
+
+    $schema->storage->txn_begin;
+
+    my $plugin = Koha::Plugin::Com::OpenFifth::AutomateMarcImport->new( { enable_plugins => 1 } );
+    $plugin->{plugindir} = File::Temp::tempdir( CLEANUP => 1 );
+
+    my $setting_dir = $plugin->{plugindir} . '/Archive/1';
+    make_path($setting_dir);
+    open my $fh, '>', "$setting_dir/old.mrc" or die $!;
+    print $fh 'legacy archived content';
+    close $fh;
+
+    $plugin->store_data( { filenames_migrated_to_regex => 1, archive_layout_migrated => 0 } );
+    $plugin->upgrade();
+
+    ok( !-f "$setting_dir/old.mrc", 'the loose file no longer sits directly under Archive/1/' );
+    ok( -f "$setting_dir/Success/old.mrc", 'it has been moved into Archive/1/Success/' );
+    is( $plugin->retrieve_data('archive_layout_migrated'), 1, 'the migration is marked as done' );
+
+    # Calling upgrade() again must not die or attempt to move anything a
+    # second time (the marker set above already short-circuits it, but this
+    # guards against a future edit to _migrate_archive_layout that forgets
+    # the marker is the only thing preventing a second, now-invalid rename).
+    my $survived_second_call = eval { $plugin->upgrade(); 1 };
+    ok( $survived_second_call && -f "$setting_dir/Success/old.mrc", 'a second upgrade() call is a safe no-op' );
 
     $schema->storage->txn_rollback;
 };

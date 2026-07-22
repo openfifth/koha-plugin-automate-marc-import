@@ -344,6 +344,11 @@ sub upgrade {
         $self->store_data( { filenames_migrated_to_regex => 1 } );
     }
 
+    unless ( $self->retrieve_data('archive_layout_migrated') ) {
+        $self->_migrate_archive_layout();
+        $self->store_data( { archive_layout_migrated => 1 } );
+    }
+
     return 1;
 }
 
@@ -463,6 +468,49 @@ sub _migrate_filenames_to_regex {
         };
         if ($@) {
             $self->{logger}->warn("Failed to migrate filenames pattern for setting $setting_id during upgrade: $@");
+        }
+    }
+
+    return 1;
+}
+
+# One-time migration (see upgrade()): archived files used to sit flat at
+# Archive/{setting_id}/{filename} (only successes were ever archived). Move
+# any such loose files into the new Archive/{setting_id}/Success/ layout so
+# they aren't orphaned by the Success/Failed restructure.
+sub _migrate_archive_layout {
+    my ( $self ) = @_;
+
+    return unless $self->{plugindir};
+    my $archive_base = $self->{plugindir} . "/Archive";
+    return unless -d $archive_base;
+
+    opendir( my $dh, $archive_base ) or do {
+        $self->{logger}->warn("Cannot open $archive_base during archive layout migration: $!");
+        return;
+    };
+    my @setting_dirs = grep { !/^\./ && -d "$archive_base/$_" } readdir($dh);
+    closedir($dh);
+
+    foreach my $setting_id (@setting_dirs) {
+        my $setting_dir = "$archive_base/$setting_id";
+
+        eval {
+            opendir( my $sdh, $setting_dir ) or die "Cannot open $setting_dir: $!";
+            my @loose_files = grep { -f "$setting_dir/$_" } readdir($sdh);
+            closedir($sdh);
+
+            for my $file (@loose_files) {
+                my $success_dir = "$setting_dir/Success";
+                $self->_make_directory($success_dir);
+                my $destination = "$success_dir/$file";
+                next if -f $destination;
+                rename( "$setting_dir/$file", $destination )
+                    or $self->{logger}->warn("Could not move $setting_dir/$file to $destination during archive layout migration: $!");
+            }
+        };
+        if ($@) {
+            $self->{logger}->warn("Failed to migrate archive layout for setting $setting_id: $@");
         }
     }
 
