@@ -71,6 +71,21 @@
                                     Default: <strong>10</strong> files. Maximum: <strong>100</strong> files.
                                 </div>
                             </li>
+                            <li>
+                                <label for="archive_failed_retention_count">Failed-import archive retention count: </label>
+                                <input type="number" name="archive_failed_retention_count" id="archive_failed_retention_count"
+                                       value="[% archive_failed_retention_count | html %]"
+                                       min="0" max="100" step="1" size="5" />
+                                <div class="hint">
+                                    Maximum number of failed-import files to keep per import setting, separately from the successful-import archive above.
+                                </div>
+                                <div class="hint">
+                                    Set to <strong>0</strong> to disable archiving of failed files entirely.
+                                </div>
+                                <div class="hint">
+                                    Default: <strong>10</strong> files. Maximum: <strong>100</strong> files.
+                                </div>
+                            </li>
                         </ol>
                     </fieldset>
 
@@ -83,15 +98,18 @@
                 <div class="alert alert-info">
                     <h4>About Archive Retention</h4>
                     <p>
-                        When MARC files are processed, they are archived to allow for deduplication (preventing the same file from being imported twice).
-                        Each import setting has its own archive directory located at <code>Archive/{setting_id}/</code>.
+                        Successfully imported files are archived to <code>Archive/{setting_id}/Success/</code>, and
+                        failed imports are archived separately to <code>Archive/{setting_id}/Failed/</code> so you can
+                        tell at a glance which files actually made it into the catalog.
                     </p>
                     <p>
-                        The retention count limits how many archived files are kept per setting. This prevents the archive from growing indefinitely and consuming disk space.
+                        Each retention count limits how many archived files are kept per setting, independently for
+                        successes and failures. This prevents the archive from growing indefinitely and consuming disk space.
                     </p>
                     <p>
-                        <strong>Note:</strong> Files in the archive are used for MD5-based deduplication. If you set a very low retention count,
-                        older files may be re-imported if they appear on the SFTP server again after their archived copy has been deleted.
+                        <strong>Note:</strong> deduplication no longer depends on these archived files — it's based on
+                        a permanent history log, so a low retention count only affects how many files you can inspect
+                        on disk, not whether an unchanged file gets re-imported.
                     </p>
                 </div>
             </main>
@@ -108,20 +126,26 @@
         $(document).ready(function(){
             // Client-side validation
             $('#configure_form').on('submit', function(e) {
-                var retentionCount = $('#archive_retention_count').val();
+                var counts = [
+                    { id: '#archive_retention_count', label: 'Archive retention count' },
+                    { id: '#archive_failed_retention_count', label: 'Failed-import archive retention count' }
+                ];
 
-                // Check if it's a valid non-negative integer
-                if (!/^\d+$/.test(retentionCount)) {
-                    alert('Retention count must be a whole number.');
-                    e.preventDefault();
-                    return false;
-                }
+                for (var i = 0; i < counts.length; i++) {
+                    var value = $(counts[i].id).val();
 
-                var count = parseInt(retentionCount, 10);
-                if (count < 0 || count > 100) {
-                    alert('Retention count must be between 0 and 100.');
-                    e.preventDefault();
-                    return false;
+                    if (!/^\d+$/.test(value)) {
+                        alert(counts[i].label + ' must be a whole number.');
+                        e.preventDefault();
+                        return false;
+                    }
+
+                    var count = parseInt(value, 10);
+                    if (count < 0 || count > 100) {
+                        alert(counts[i].label + ' must be between 0 and 100.');
+                        e.preventDefault();
+                        return false;
+                    }
                 }
 
                 return true;

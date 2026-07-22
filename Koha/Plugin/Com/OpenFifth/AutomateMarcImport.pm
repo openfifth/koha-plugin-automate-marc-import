@@ -171,18 +171,25 @@ sub configure {
 
     if ($cgi->param('save')) {
         my $retention_count = $cgi->param('archive_retention_count');
+        my $failed_retention_count = $cgi->param('archive_failed_retention_count');
 
-        # Validate: must be non-negative integer, max 100
-        if (defined $retention_count && $retention_count =~ /^\d+$/ && $retention_count >= 0 && $retention_count <= 100) {
-            $self->store_data({ archive_retention_count => int($retention_count) });
+        my $valid_retention = defined $retention_count && $retention_count =~ /^\d+$/ && $retention_count >= 0 && $retention_count <= 100;
+        my $valid_failed_retention = defined $failed_retention_count && $failed_retention_count =~ /^\d+$/ && $failed_retention_count >= 0 && $failed_retention_count <= 100;
+
+        if ( $valid_retention && $valid_failed_retention ) {
+            $self->store_data({
+                archive_retention_count        => int($retention_count),
+                archive_failed_retention_count => int($failed_retention_count),
+            });
             $template->param(success_message => 'Configuration saved successfully.');
         } else {
-            $template->param(error_message => 'Retention count must be a number between 0 and 100.');
+            $template->param(error_message => 'Retention counts must be numbers between 0 and 100.');
         }
     }
 
     $template->param(
-        archive_retention_count => $self->retrieve_data('archive_retention_count') // 10
+        archive_retention_count        => $self->retrieve_data('archive_retention_count') // 10,
+        archive_failed_retention_count => $self->retrieve_data('archive_failed_retention_count') // 10,
     );
 
     $self->output_html($template->output());
