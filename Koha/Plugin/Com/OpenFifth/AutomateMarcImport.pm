@@ -145,8 +145,17 @@ sub tool {
 
     # ..display settings list (default action)
     my @automate_marc_import_plugin_settings = $self->_get_settings_for_display();
-    if ($cgi->param('op')) {
-        $template->param(op => $cgi->param('op'))
+    my $op = $cgi->param('op') // '';
+    if ($op) {
+        $template->param(op => $op)
+    }
+
+    my @import_history;
+    if ( $op eq 'history' ) {
+        @import_history = $self->_get_import_history(
+            setting_id => scalar $cgi->param('history_setting_id'),
+            outcome    => scalar $cgi->param('history_outcome'),
+        );
     }
 
     # Build lookup data for templates and matchers (for JavaScript use in add_form)
@@ -160,6 +169,10 @@ sub tool {
         automate_marc_import_plugin_settings_count => scalar @automate_marc_import_plugin_settings,
         marc_modification_templates => $template_list,
         record_matchers => $matcher_list,
+        import_history => \@import_history,
+        import_history_count => scalar @import_history,
+        history_setting_id => scalar $cgi->param('history_setting_id'),
+        history_outcome => scalar $cgi->param('history_outcome'),
     );
     $self->output_html( $template->output() );
 }
@@ -451,6 +464,47 @@ sub _get_last_successful_hash {
     );
 
     return $hash;
+}
+
+sub _get_import_history {
+    my ( $self, %filters ) = @_;
+
+    my $table = $self->_log_table_name;
+    my $dbh   = C4::Context->dbh;
+
+    my @where;
+    my @bind;
+    if ( defined $filters{setting_id} && $filters{setting_id} ne '' ) {
+        push @where, 'setting_id = ?';
+        push @bind, $filters{setting_id};
+    }
+    if ( defined $filters{outcome} && $filters{outcome} ne '' ) {
+        push @where, 'outcome = ?';
+        push @bind, $filters{outcome};
+    }
+    my $where_clause = @where ? 'WHERE ' . join( ' AND ', @where ) : '';
+
+    my $rows = $dbh->selectall_arrayref(
+        "SELECT id, setting_id, filename, file_hash, outcome, batch_id, error_message, processed_on
+         FROM $table $where_clause ORDER BY processed_on DESC, id DESC LIMIT 200",
+        { Slice => {} },
+        @bind
+    );
+
+    # Resolve setting names in Perl — settings live as JSON blobs in
+    # plugin_data, not a table, so there's no SQL join available.
+    my %setting_names;
+    foreach my $setting_id ( split( ',', $self->retrieve_data('selected_setting_ids') // '' ) ) {
+        next if $setting_id eq '';
+        my $setting_data = decode_json( $self->retrieve_data($setting_id) );
+        $setting_names{$setting_id} = $setting_data->{name};
+    }
+
+    foreach my $row ( @{$rows} ) {
+        $row->{setting_name} = $setting_names{ $row->{setting_id} } // "(deleted setting #$row->{setting_id})";
+    }
+
+    return @{$rows};
 }
 
 # One-time migration (see upgrade()): filenames used to be matched as plain
