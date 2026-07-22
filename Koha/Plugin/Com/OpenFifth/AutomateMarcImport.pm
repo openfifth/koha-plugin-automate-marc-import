@@ -373,6 +373,54 @@ sub _log_table_name {
     return $self->{log_table};
 }
 
+# Computes the MD5 hex digest of a local file. Returns undef (logging a
+# warning) if the file can't be opened, rather than dying — this is called
+# on a file we just downloaded ourselves, so a failure here is unusual and
+# the caller falls back to treating the file as unhashable rather than
+# aborting the whole run.
+sub _hash_file {
+    my ( $self, $path ) = @_;
+
+    open my $fh, '<', $path or do {
+        $self->{logger}->warn("Cannot open $path for MD5 hashing: $!");
+        return undef;
+    };
+    binmode $fh;
+    my $digest = Digest::MD5->new->addfile($fh)->hexdigest;
+    close $fh;
+
+    return $digest;
+}
+
+sub _log_attempt {
+    my ( $self, %args ) = @_;
+
+    my $table = $self->_log_table_name;
+    my $dbh   = C4::Context->dbh;
+
+    $dbh->do(
+        "INSERT INTO $table (setting_id, filename, file_hash, outcome, batch_id, error_message, processed_on) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+        undef,
+        $args{setting_id}, $args{filename}, $args{file_hash}, $args{outcome}, $args{batch_id}, $args{error_message}
+    );
+
+    return 1;
+}
+
+sub _get_last_successful_hash {
+    my ( $self, $setting_id, $filename ) = @_;
+
+    my $table = $self->_log_table_name;
+    my $dbh   = C4::Context->dbh;
+
+    my ($hash) = $dbh->selectrow_array(
+        "SELECT file_hash FROM $table WHERE setting_id = ? AND filename = ? AND outcome = 'success' ORDER BY processed_on DESC LIMIT 1",
+        undef, $setting_id, $filename
+    );
+
+    return $hash;
+}
+
 # One-time migration (see upgrade()): filenames used to be matched as plain
 # substrings, now they're matched as regexes. quotemeta() every existing
 # line so a stored pattern keeps matching exactly the same filenames it did
