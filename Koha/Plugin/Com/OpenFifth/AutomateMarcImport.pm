@@ -327,6 +327,52 @@ sub upgrade {
     return 1;
 }
 
+# Framework quirk: this plugin has never had an install() method before. Koha
+# only calls install() when its own __INSTALLED__ marker has never been set,
+# which — for every site already running this plugin — is true today, since
+# install() never existed to set it. The very next version bump therefore
+# runs this install() instead of the normal upgrade() path, once, for every
+# existing install. That's harmless: the existing upgrade() only performs the
+# filename-regex migration from the previous release, which will already
+# have completed and been separately marked done (filenames_migrated_to_regex)
+# for any site that's already on that version. After this one-time
+# transition, __INSTALLED__ is set and future version bumps go through
+# upgrade() as normal.
+sub install {
+    my ( $self ) = @_;
+
+    my $table = $self->_log_table_name;
+    my $dbh   = C4::Context->dbh;
+
+    $dbh->do(qq{
+        CREATE TABLE IF NOT EXISTS $table (
+            id             INT(11) NOT NULL AUTO_INCREMENT,
+            setting_id     INT(11) NOT NULL,
+            filename       VARCHAR(255) NOT NULL,
+            file_hash      VARCHAR(32) NOT NULL,
+            outcome        VARCHAR(10) NOT NULL,
+            batch_id       INT(11) DEFAULT NULL,
+            error_message  TEXT DEFAULT NULL,
+            processed_on   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY setting_filename_outcome (setting_id, filename, outcome, processed_on)
+        )
+    });
+
+    return 1;
+}
+
+# Returns the fully-qualified name for this plugin's own log table (e.g.
+# koha_plugin_com_openfifth_automatemarcimport_log), avoiding any naming
+# collision with another plugin's tables. Memoized since it's derived from
+# the (unchanging) plugin class name.
+sub _log_table_name {
+    my ( $self ) = @_;
+
+    $self->{log_table} //= $self->get_qualified_table_name('log');
+    return $self->{log_table};
+}
+
 # One-time migration (see upgrade()): filenames used to be matched as plain
 # substrings, now they're matched as regexes. quotemeta() every existing
 # line so a stored pattern keeps matching exactly the same filenames it did
