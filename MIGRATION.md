@@ -26,12 +26,12 @@ an earlier Koha version, stay on getandloadmarc until you upgrade Koha.
 | Framework selection | Not supported | Per-setting: new-record and overlay frameworks |
 | Auto-commit vs. manual review | Always auto-commits | Configurable per setting |
 | Record types | Biblio only | Biblio, authority, or holdings (per profile) |
-| Dedup | MD5 vs. archive + 6-month `import_batches` check + 160-day age cutoff | MD5 vs. per-setting archive + 6-month `import_batches` check + mtime-since-last-run |
-| Archiving | Single archive dir, never pruned | Per-setting archive dir with configurable retention (default 10, 0 disables) |
+| Dedup | MD5 vs. archive + 6-month `import_batches` filename check + 160-day age cutoff | Real content-hash dedup against a permanent log table — only *successful* imports are deduplicated by hash; a failed import is always retried the next run rather than silently skipped |
+| Archiving | Single archive dir, never pruned | Separate `Success/`/`Failed/` archive dirs per setting, each with its own configurable retention count (default 10, 0 disables) |
 | Scheduling | Separate crontab entry, two phases (`retrieve` / `stage`) run independently | Hooks into Koha's built-in nightly cron plugin hook — no crontab entry needed |
-| Manual trigger | Yes, via intranet tool UI (retrieve then stage) | No — nightly cron only |
-| Notifications | None (log files only) | Staff home-page banner when staged batches await review |
-| Per-run log files | Yes, `Logs/<file>.log` per stage/commit | No — Koha::Logger only |
+| Manual trigger | Yes, via intranet tool UI (retrieve then stage) | No — nightly cron only, by design (see Gaps below) |
+| Notifications | None (log files only) | Staff home-page banner when staged batches await review, plus a permanent, filterable **History** tab (Tools > Automate MARC Import > History) showing every processed file's outcome, content hash, and any error |
+| Per-run log files | Yes, `Logs/<file>.log` per stage/commit | No per-file text logs, but the History tab is an equivalent — and more durable — audit trail (see Notifications row) |
 
 ## Gaps to be aware of
 
@@ -40,14 +40,20 @@ cannot. None of them block migration, but plan around them:
 
 - **No manual "run now" trigger.** getandloadmarc's intranet tool let staff
   force a retrieve/stage on demand. automate-marc-import only runs via the
-  nightly cron hook. If a workflow depends on ad-hoc runs, that will need to
-  change (or wait for the file to land and be picked up on the next cron run).
+  nightly cron hook. This is a deliberate design decision, not a temporary
+  gap — a reliable on-demand trigger would need a background job, and if a
+  background job is needed anyway, the nightly cron plus the History tab
+  already cover the same need (check results in the morning) without the
+  added complexity. If a workflow depends on ad-hoc runs, that will need to
+  change (or wait for the file to land and be picked up on the next cron
+  run).
 - **No per-vendor schedule.** All settings run together on Koha's nightly
-  cron; you can't run vendor A daily and vendor B weekly.
-- **No per-run log files.** getandloadmarc wrote a log file per stage/commit
-  under `Logs/`. automate-marc-import logs only via Koha::Logger
-  (`/var/log/koha/`), so there's no equivalent per-file artifact to inspect
-  after the fact — use the staged-batch review UI and Koha's logs instead.
+  cron; you can't run vendor A daily and vendor B weekly. Also deliberate —
+  relying on Koha's own unified cron hook is by design, not an oversight.
+
+Note: getandloadmarc's per-file `Logs/<file>.log` files are **not** a
+remaining gap — automate-marc-import's History tab supersedes them with a
+permanent, filterable, structured record instead (see the table above).
 
 ## Migration steps
 
@@ -110,6 +116,17 @@ Decide on overlay action (replace/create_new/ignore) and no-match action —
 getandloadmarc conflated these into a single matcher ID, so this is a good
 opportunity to make the intended behaviour explicit.
 
+If getandloadmarc's `matchrule` relied on more than a simple ISBN or
+exact-field match — e.g. anything resembling a tiered fallback, or
+preserving specific local fields across an overlay — see
+[MATCHING_AND_OVERLAY.md](MATCHING_AND_OVERLAY.md) before assuming that
+behaviour can't be replicated. Several capabilities that look missing from
+Koha's matcher/overlay system are actually just unconfigured (ISBN-normalized
+matching ships by default; field-level preservation across an overlay is
+available via the `MARCOverlayRules` system preference, off by default) —
+that document covers exactly what's configurable and the one thing that
+genuinely isn't.
+
 ### 5. Create the automate-marc-import setting
 
 In **Tools > Automate MARC Import**, create a new setting that ties together
@@ -124,21 +141,29 @@ steps 2–4. Decide on auto-commit:
 
 ### 6. Set archive retention
 
-Configure the **archive retention count** (Plugins > Automate MARC Import >
-Configure). getandloadmarc never pruned its archive; pick a sensible number
-(default 10) rather than carrying that behaviour forward.
+Configure the **archive retention count** and **failed-import archive
+retention count** (Plugins > Automate MARC Import > Configure) — these
+govern the `Success/` and `Failed/` archive directories independently.
+getandloadmarc never pruned its archive at all; pick sensible numbers
+(default 10 each) rather than carrying that behaviour forward. Note that
+neither count affects deduplication accuracy — that's handled entirely by
+the permanent log table now, independent of how many archived files you
+choose to keep on disk.
 
 ### 7. Parallel run and cut over
 
 1. Leave getandloadmarc's crontab entries in place but do not disable them
    yet.
 2. Let automate-marc-import's nightly cron hook run alongside it for a few
-   nights. Because both plugins de-duplicate independently (each maintains
-   its own archive and 6-month `import_batches` filename check), running
-   both briefly should not cause double-imports of the same file — but
-   confirm this against actual staged/committed batches before relying on
-   it.
-3. Compare staged/committed batches and the staff notification banner
+   nights. Each plugin tracks what it's processed independently (getandloadmarc
+   via its own archive/`import_batches` check, automate-marc-import via its
+   own content-hash log), so running both briefly should not cause either
+   plugin to *re-download* the same file twice — but neither plugin knows
+   about the other, so if both stage/commit the same incoming file you can
+   end up with a genuine duplicate biblio via your matcher/overlay settings.
+   Confirm behaviour against actual staged/committed batches before relying
+   on a real parallel-run period.
+3. Compare staged/committed batches and automate-marc-import's History tab
    against getandloadmarc's log files (`Logs/<file>.log`) for the same
    nights.
 4. Once satisfied, remove getandloadmarc's crontab entries and disable/
