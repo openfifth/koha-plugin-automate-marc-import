@@ -65,6 +65,11 @@ Create or configure import batch profiles that define how MARC records are proce
    - **Actions**: What to do with matches, non-matches, and items
 4. Add a **Profile name** and click 'Save the profile'
 
+See [MATCHING_AND_OVERLAY.md](MATCHING_AND_OVERLAY.md) for details on configuring
+ISBN-normalized matching, why tiered/fallback matching rules aren't possible,
+and how to preserve existing catalogue fields across an overlay using Koha's
+MARCOverlayRules system.
+
 ### Plugin Configuration
 
 Configure the plugin to connect transport servers with import profiles:
