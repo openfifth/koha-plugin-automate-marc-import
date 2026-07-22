@@ -1231,131 +1231,63 @@ sub _make_directory {
     $self->{logger}->warn("Could not create directory $directory: $message");
 }
 
-sub _should_process_file {
-    my ( $self, $filename, $setting_id ) = @_;
-
-    # Use per-setting archive path if setting_id is provided
-    my $archive_path;
-    if (defined $setting_id && $setting_id ne '') {
-        $archive_path = $self->{plugindir} . "/Archive/$setting_id/$filename";
-    } else {
-        $archive_path = $self->{plugindir} . "/Archive/$filename";
-    }
-
-    # If file doesn't exist in archive, it's new and should be processed
-    return 1 unless -f $archive_path;
-
-    # File exists in archive - compare MD5 checksums
-    # We'll check after download, so for now return 1
-    # The actual MD5 check happens in _check_file_duplicate after download
-    return 1;
-}
-
-sub _check_file_duplicate {
-    my ( $self, $source_file, $filename, $setting_id ) = @_;
-
-    # Use per-setting archive path if setting_id is provided
-    my $archive_file;
-    if (defined $setting_id && $setting_id ne '') {
-        $archive_file = $self->{plugindir} . "/Archive/$setting_id/$filename";
-    } else {
-        $archive_file = $self->{plugindir} . "/Archive/$filename";
-    }
-
-    # If file doesn't exist in archive, it's not a duplicate
-    return 0 unless -f $archive_file;
-
-    # Calculate MD5 of archive file
-    open my $archive_fh, '<', $archive_file or do {
-        $self->{logger}->warn("Cannot open archive file $archive_file for MD5 check: $!");
-        return 0;
-    };
-    binmode $archive_fh;
-    my $archive_digest = Digest::MD5->new->addfile($archive_fh)->hexdigest;
-    close $archive_fh;
-
-    # Calculate MD5 of source file
-    open my $source_fh, '<', $source_file or do {
-        $self->{logger}->warn("Cannot open source file $source_file for MD5 check: $!");
-        return 0;
-    };
-    binmode $source_fh;
-    my $source_digest = Digest::MD5->new->addfile($source_fh)->hexdigest;
-    close $source_fh;
-
-    # Return 1 if files are identical (is duplicate), 0 if different
-    return $archive_digest eq $source_digest;
-}
-
 sub _archive_file {
-    my ( $self, $source_file, $filename, $setting_id ) = @_;
+    my ( $self, $source_file, $filename, $setting_id, $outcome ) = @_;
 
-    my $retention_count = $self->retrieve_data('archive_retention_count') // 10;
+    my $subdir        = $outcome eq 'success' ? 'Success' : 'Failed';
+    my $retention_key = $outcome eq 'success' ? 'archive_retention_count' : 'archive_failed_retention_count';
+    my $retention_count = $self->retrieve_data($retention_key) // 10;
 
-    # If retention count is 0, skip archiving entirely (just clean up)
     if ($retention_count == 0) {
-        $self->{logger}->info("Archive retention count is 0, not archiving file '$filename'");
+        $self->{logger}->info("Archive retention count is 0, not archiving $outcome file '$filename'");
         if (-f $source_file) {
             unlink($source_file) or $self->{logger}->warn("Could not remove temporary file $source_file: $!");
         }
         return;
     }
 
-    # Use per-setting archive path if setting_id is provided
-    my $archive_path;
-    if (defined $setting_id && $setting_id ne '') {
-        $archive_path = $self->{plugindir} . "/Archive/$setting_id/$filename";
+    my $archive_dir = $self->{plugindir} . "/Archive/$setting_id/$subdir";
+    $self->_make_directory($archive_dir);
+    my $archive_path = "$archive_dir/$filename";
+
+    if (copy($source_file, $archive_path)) {
+        $self->{logger}->info("Archived $outcome file '$filename' to Archive/$setting_id/$subdir/");
     } else {
-        $archive_path = $self->{plugindir} . "/Archive/$filename";
+        $self->{logger}->error("Failed to archive $outcome file '$filename': $!");
     }
 
-    # Check if this is actually a duplicate before archiving
-    if ($self->_check_file_duplicate($source_file, $filename, $setting_id)) {
-        $self->{logger}->info("File '$filename' is identical to archived version, not re-archiving");
-    } else {
-        # Copy file to archive
-        if (copy($source_file, $archive_path)) {
-            $self->{logger}->info("Archived file '$filename' to Archive/$setting_id/ directory");
-        } else {
-            $self->{logger}->error("Failed to archive file '$filename': $!");
-        }
-    }
-
-    # Clean up the source file from plugin directory
     if (-f $source_file) {
         unlink($source_file) or $self->{logger}->warn("Could not remove temporary file $source_file: $!");
     }
 
-    # Apply retention policy to the setting's archive directory
-    if (defined $setting_id && $setting_id ne '') {
-        $self->_apply_retention_policy($setting_id);
+    $self->_apply_retention_policy( $archive_dir, $retention_count );
+
+    # A filename that previously failed and has now succeeded: the Failed/
+    # archive should only ever reflect names that are *currently* failing —
+    # history lives in the log table, not the file archive.
+    if ( $outcome eq 'success' ) {
+        my $stale_failed = $self->{plugindir} . "/Archive/$setting_id/Failed/$filename";
+        if ( -f $stale_failed ) {
+            unlink($stale_failed) or $self->{logger}->warn("Could not remove stale failed archive $stale_failed: $!");
+        }
     }
 }
 
 sub _apply_retention_policy {
-    my ( $self, $setting_id ) = @_;
+    my ( $self, $directory, $max_files ) = @_;
 
-    return unless defined $setting_id && $setting_id ne '';
-
-    my $max_files = $self->retrieve_data('archive_retention_count') // 10;
-
-    # If max_files is 0, retention is disabled (files are not archived)
     return if $max_files == 0;
+    return unless -d $directory;
 
-    my $archive_dir = $self->{plugindir} . "/Archive/$setting_id";
-
-    return unless -d $archive_dir;
-
-    # Get list of files in the archive directory
-    opendir(my $dh, $archive_dir) or do {
-        $self->{logger}->warn("Cannot open archive directory $archive_dir: $!");
+    opendir(my $dh, $directory) or do {
+        $self->{logger}->warn("Cannot open archive directory $directory: $!");
         return;
     };
 
     my @files;
     while (my $file = readdir($dh)) {
         next if $file =~ /^\./; # Skip . and ..
-        my $full_path = "$archive_dir/$file";
+        my $full_path = "$directory/$file";
         next unless -f $full_path; # Skip directories
         push @files, {
             path => $full_path,

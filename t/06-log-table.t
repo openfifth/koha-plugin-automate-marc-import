@@ -2,9 +2,9 @@
 
 use Modern::Perl;
 
-use Test::More tests => 4;
+use Test::More tests => 6;
 
-use File::Temp;
+use File::Temp qw(tempdir);
 
 use C4::Context;
 use Koha::Database;
@@ -106,4 +106,67 @@ subtest '_log_attempt inserts a row, _get_last_successful_hash reads it back' =>
 
     $dbh->do("DROP TABLE IF EXISTS $table");
     $schema->storage->txn_rollback;
+};
+
+subtest '_archive_file splits successes and failures into separate directories' => sub {
+    plan tests => 4;
+
+    my $plugin = Koha::Plugin::Com::OpenFifth::AutomateMarcImport->new( { enable_plugins => 1 } );
+    $plugin->{plugindir} = File::Temp::tempdir( CLEANUP => 1 );
+    $plugin->store_data( { archive_retention_count => 10, archive_failed_retention_count => 10 } );
+
+    my $success_src = File::Temp->new;
+    print $success_src "success content";
+    close $success_src;
+
+    $plugin->_archive_file( $success_src->filename, 'ok.mrc', 42, 'success' );
+    ok( -f $plugin->{plugindir} . '/Archive/42/Success/ok.mrc', 'successful file archived under Success/' );
+
+    my $failure_src = File::Temp->new;
+    print $failure_src "failure content";
+    close $failure_src;
+
+    $plugin->_archive_file( $failure_src->filename, 'bad.mrc', 42, 'failure' );
+    ok( -f $plugin->{plugindir} . '/Archive/42/Failed/bad.mrc', 'failed file archived under Failed/' );
+
+    # A filename that previously failed and now succeeds: the stale Failed/ copy is removed.
+    my $retry_fail_src = File::Temp->new;
+    print $retry_fail_src "still broken";
+    close $retry_fail_src;
+    $plugin->_archive_file( $retry_fail_src->filename, 'flaky.mrc', 42, 'failure' );
+    ok( -f $plugin->{plugindir} . '/Archive/42/Failed/flaky.mrc', 'flaky.mrc failure archived first' );
+
+    my $retry_success_src = File::Temp->new;
+    print $retry_success_src "fixed now";
+    close $retry_success_src;
+    $plugin->_archive_file( $retry_success_src->filename, 'flaky.mrc', 42, 'success' );
+    ok( !-f $plugin->{plugindir} . '/Archive/42/Failed/flaky.mrc', 'stale Failed/ copy removed once flaky.mrc succeeds' );
+};
+
+subtest '_apply_retention_policy prunes each directory independently' => sub {
+    plan tests => 2;
+
+    my $plugin = Koha::Plugin::Com::OpenFifth::AutomateMarcImport->new( { enable_plugins => 1 } );
+    my $dir    = File::Temp::tempdir( CLEANUP => 1 );
+
+    for my $i ( 1 .. 5 ) {
+        write_test_file( "$dir/file$i.mrc", "content $i" );
+        sleep 1 if $i < 5;    # ensure distinct mtimes for oldest-first eviction
+    }
+
+    $plugin->_apply_retention_policy( $dir, 3 );
+
+    opendir( my $dh, $dir ) or die $!;
+    my @remaining = grep { !/^\./ } readdir($dh);
+    closedir($dh);
+
+    is( scalar(@remaining), 3, 'only 3 files remain after applying a retention count of 3' );
+    ok( ( grep { $_ eq 'file5.mrc' } @remaining ), 'the newest file survives retention pruning' );
+};
+
+sub write_test_file {
+    my ( $path, $content ) = @_;
+    open my $fh, '>', $path or die "Cannot write $path: $!";
+    print $fh $content;
+    close $fh;
 };
