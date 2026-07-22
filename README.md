@@ -5,7 +5,7 @@ A Koha plugin to automate the import and staging of MARC files by enabling night
 ## Features
 
 - **Automated MARC Import**: Nightly retrieval of MARC files from configured SFTP/FTP servers
-- **Flexible File Matching**: Configure import rules based on filename patterns
+- **Flexible File Matching**: Configure import rules using regular-expression filename patterns
 - **MD5 Deduplication**: Prevents reprocessing of identical files
 - **Auto-Commit Option**: Automatically commit staged records without manual review
 - **Framework Selection**: Configure bibliographic frameworks for new and replacement records when auto-committing
@@ -17,7 +17,7 @@ A Koha plugin to automate the import and staging of MARC files by enabling night
 
 ## Requirements
 
-- Koha 24.11 or later (requires Koha::File::Transport infrastructure)
+- Koha 25.11.00.000 or later (requires Koha::File::Transport infrastructure)
 - Configured transport servers (Administration > SFTP Servers)
 - Import batch profiles configured (Tools > Import Batch Profiles)
 - Sufficient disk space for file downloads and archives
@@ -74,10 +74,14 @@ Configure the plugin to connect transport servers with import profiles:
 3. Configure the automation rule:
    - **Transport server**: Select the configured SFTP/FTP server
    - **Import profile**: Select the batch profile to use for files from this server
-   - **Filename patterns**: Optional patterns to match specific files (one per line)
+   - **Filename patterns**: Optional regular expressions to match specific files (one per line)
      - Leave blank to process all supported MARC files from the server
-     - Examples: `daily_update`, `weekly_marc`, `vendor_export`, `ebooks`
-     - Patterns are matched as substrings (case-insensitive)
+     - Patterns are Perl-compatible regular expressions, matched case-insensitively
+     - Only the part of the filename **before its first dot** is compared — the file extension, and anything after any later dots, is not visible to these patterns
+     - Simple examples (still work exactly like plain text): `daily_update`, `weekly_marc`, `vendor_export`, `ebooks`
+     - Regex examples: `^dispatch` (starts with), `_final$` (ends with, before the extension), `daily|weekly` (either), `report_\d{4}` (four digits)
+     - Characters with special regex meaning (`. * + ? ^ $ ( ) [ ] { } | \`) must be escaped with a backslash to match them literally, e.g. `report\[2024\]`
+     - See the [perlre documentation](https://perldoc.perl.org/perlre) for full syntax
    - **Auto-commit**: Enable to automatically commit staged records (bypass manual review)
    - **Framework options** (when auto-commit is enabled):
      - **New record framework**: Bibliographic framework to use for newly created records (default: Default framework)
@@ -259,6 +263,12 @@ When auto-commit is disabled, staged records require manual review:
 - **Solution**: Check form validation errors
 - **Solution**: Ensure transport servers and profiles exist
 - **Solution**: Verify user has tools permissions (tools module access)
+
+**Problem**: "Filename pattern is not a valid regular expression" / "not allowed: embedded code blocks"
+
+- **Solution**: Filename patterns are Perl-compatible regular expressions, one per line. Check each line compiles as a regex — see the [perlre documentation](https://perldoc.perl.org/perlre).
+- **Solution**: Escape characters with special regex meaning (`. * + ? ^ $ ( ) [ ] { } | \`) with a backslash if you want them matched literally, e.g. `report\[2024\]`. Remember only the part of the filename before its first dot is ever compared.
+- **Solution**: Patterns containing `(?{ ... })` or `(??{ ... })` are always rejected — these embed executable code in a regex and are never valid here.
 
 **Problem**: Plugin not running in cron
 

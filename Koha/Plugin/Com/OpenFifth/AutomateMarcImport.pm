@@ -311,6 +311,50 @@ sub cronjob_nightly {
     }
 }
 
+sub upgrade {
+    my ( $self ) = @_;
+
+    # Koha calls upgrade() on every version bump where plugin_version >
+    # database_version (see Koha::Plugins::Base), not just the one this was
+    # written for — guard with our own marker so a later, unrelated version
+    # bump can't run this migration again and double-escape already-migrated
+    # patterns.
+    unless ( $self->retrieve_data('filenames_migrated_to_regex') ) {
+        $self->_migrate_filenames_to_regex();
+        $self->store_data( { filenames_migrated_to_regex => 1 } );
+    }
+
+    return 1;
+}
+
+# One-time migration (see upgrade()): filenames used to be matched as plain
+# substrings, now they're matched as regexes. quotemeta() every existing
+# line so a stored pattern keeps matching exactly the same filenames it did
+# under the old substring behaviour, with no admin action required.
+sub _migrate_filenames_to_regex {
+    my ( $self ) = @_;
+
+    foreach my $setting_id ( split( ',', $self->retrieve_data('selected_setting_ids') // '' ) ) {
+        next if $setting_id eq '';
+
+        eval {
+            my $setting_data = decode_json( $self->retrieve_data($setting_id) );
+            my $filenames = $setting_data->{filenames};
+
+            if ( defined $filenames && $filenames ne '' ) {
+                $setting_data->{filenames} =
+                    join( "\n", map { quotemeta($_) } split( /\r?\n/, $filenames ) );
+                $self->store_data( { $setting_id => encode_json($setting_data) } );
+            }
+        };
+        if ($@) {
+            $self->{logger}->warn("Failed to migrate filenames pattern for setting $setting_id during upgrade: $@");
+        }
+    }
+
+    return 1;
+}
+
 sub intranet_js {
     my ( $self ) = @_;
     if ($self->can('page') && $self->page != '/cgi-bin/koha/mainpage.pl') {
@@ -474,7 +518,6 @@ sub _get_setting_by_filename {
     my ( $self, $setting_ids, $filename ) = @_;
 
     my $default_setting;
-    my $lc_filename = lc( $filename );
 
     foreach my $setting_id ( @{$setting_ids} ) {
         my $setting_data = decode_json( $self->retrieve_data($setting_id) );
@@ -484,16 +527,38 @@ sub _get_setting_by_filename {
             next;
         }
 
-        # Check if filename contains any of the line-delimited patterns
+        # Check if filename matches any of the line-delimited regex patterns
         foreach my $pattern ( split( /\r?\n/, $setting_data->{filenames} ) ) {
             $pattern =~ s/^\s+|\s+$//g;    # trim whitespace
             next if $pattern eq '';
-            if ( index( $lc_filename, lc($pattern) ) != -1 ) {
+            if ( $self->_filename_matches_pattern( $filename, $pattern ) ) {
                 return $setting_data;
             }
         }
     }
     return $default_setting;
+}
+
+# Matches $filename against the regex $pattern, case-insensitively. Wrapped in
+# an alarm-based timeout so a pathological pattern (catastrophic backtracking)
+# can't hang the single-threaded nightly cron run for every configured vendor.
+sub _filename_matches_pattern {
+    my ( $self, $filename, $pattern ) = @_;
+
+    my $matched;
+    eval {
+        local $SIG{ALRM} = sub { die "regex_timeout\n" };
+        alarm(2);
+        $matched = ( $filename =~ /$pattern/i ) ? 1 : 0;
+        alarm(0);
+    };
+    if ($@) {
+        alarm(0);
+        my $reason = $@ eq "regex_timeout\n" ? 'timed out (possible catastrophic backtracking)' : "error: $@";
+        $self->{logger}->warn("Filename pattern matching $reason: pattern='$pattern'");
+        return 0;
+    }
+    return $matched;
 }
 
 sub _get_settings_for_display {
@@ -640,6 +705,12 @@ sub _validate_cgi_params {
     # Sanitize filenames
     my $sanitized_filenames = $self->_sanitize_filenames($filenames);
 
+    # Validate each line is a safe, compilable regex
+    my $filenames_error = $self->_validate_filename_patterns($sanitized_filenames);
+    if ($filenames_error) {
+        return { valid => 0, error => $filenames_error };
+    }
+
     # Sanitize download directory override (light-touch: it's a real remote path)
     my $sanitized_download_directory = $self->_sanitize_download_directory($download_directory);
 
@@ -677,11 +748,11 @@ sub _sanitize_filenames {
 
     return '' unless defined $filenames;
 
-    # Convert to lowercase
-    $filenames = lc($filenames);
-
-    # Remove dangerous characters (path separators, null bytes, control chars)
-    $filenames =~ s/[\/\\:\0\x00-\x1f\x7f-\x9f]//g;
+    # This field holds line-delimited regexes, matched case-insensitively at
+    # runtime (see _filename_matches_pattern), so case and syntax characters
+    # like \ / : [ ] are meaningful and must not be touched here. Only strip
+    # null bytes/control characters, same light touch as _sanitize_download_directory.
+    $filenames =~ s/[\0\x00-\x1f\x7f-\x9f]//g;
 
     # Limit length to prevent DoS
     if (length($filenames) > 1000) {
@@ -692,6 +763,33 @@ sub _sanitize_filenames {
     $filenames =~ s/^\s+|\s+$//g;
 
     return $filenames;
+}
+
+# Rejects lines that don't compile as a regex, and explicitly blocks Perl's
+# embedded-code-in-regex constructs ((?{ ... }) / (??{ ... })) regardless of
+# taint mode, since Koha's web scripts don't reliably run under -T.
+sub _validate_filename_patterns {
+    my ( $self, $filenames ) = @_;
+
+    return undef unless defined $filenames && $filenames ne '';
+
+    foreach my $pattern ( split( /\r?\n/, $filenames ) ) {
+        $pattern =~ s/^\s+|\s+$//g;
+        next if $pattern eq '';
+
+        if ( $pattern =~ /\(\?\??\{/ ) {
+            return "Filename pattern '$pattern' is not allowed: embedded code blocks are not permitted";
+        }
+
+        my $compiles = eval { qr/$pattern/; 1 };
+        if ( !$compiles ) {
+            my $reason = $@;
+            $reason =~ s/\s+at\s+\S+\s+line\s+\d+\.?\s*$//s;
+            return "Filename pattern '$pattern' is not a valid regular expression: $reason";
+        }
+    }
+
+    return undef;
 }
 
 sub _sanitize_download_directory {

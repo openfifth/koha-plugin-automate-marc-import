@@ -12,6 +12,15 @@ along with the comparison links — do not edit the heading or the links by hand
 
 ## [Unreleased]
 
+### Changed
+- Filename patterns are now matched as Perl-compatible regular expressions instead of plain substrings, enabling anchors (`^`/`$`), alternation (`daily|weekly`), character classes, and quantifiers. Matching stays case-insensitive. Existing patterns are migrated automatically on upgrade (see below), so no admin action is required to keep current behaviour.
+- `tool.tt` filename patterns field now documents regex syntax with examples and a link to the perlre documentation.
+
+### Added
+- A one-time `upgrade()` migration that rewrites every existing setting's filename patterns to their `quotemeta`-escaped equivalent, guaranteeing they keep matching exactly the same filenames they did under the old substring behaviour. Guarded against re-running on later, unrelated version bumps.
+- Filename pattern validation on save: each line must compile as a regex, and embedded-code constructs (`(?{ ... })` / `(??{ ... })`) are explicitly rejected regardless of Perl taint mode.
+- A per-pattern timeout guard (`alarm`-based) around filename matching, so a pathological regex (catastrophic backtracking) is skipped and logged rather than hanging the nightly cron run for every configured vendor.
+
 ## [1.3.0] - 2026-07-21
 
 ## [1.2.1] - 2026-07-21

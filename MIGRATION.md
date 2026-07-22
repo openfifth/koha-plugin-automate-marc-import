@@ -19,7 +19,7 @@ an earlier Koha version, stay on getandloadmarc until you upgrade Koha.
 | Vendors/sources | One, hardcoded | Unlimited, independent "settings" |
 | Transport protocols | SFTP only | SFTP, FTP, local filesystem (via Koha's File Transports) |
 | Credentials | Plaintext in plugin storage | Managed centrally in Koha's File Transports admin, reusable across settings |
-| File routing | One filename regex for the whole plugin | Per-setting substring patterns, with one setting as fallback/default per transport+directory |
+| File routing | One filename regex for the whole plugin | Per-setting regex patterns, with one setting as fallback/default per transport+directory |
 | Import mechanism | Shells out to `stage_file.pl` / `commit_file.pl` | Calls `C4::ImportBatch` directly, wrapped in DB transactions |
 | Matching/overlay | One matcher ID, fixed `--item-action always_add` | Per-profile: matcher, overlay action, no-match action, 5 item-action strategies |
 | MARC modification template | One global setting | Per-profile |
@@ -72,13 +72,26 @@ Test the connection before proceeding.
 
 ### 3. Recreate the filename pattern
 
-getandloadmarc's `fptn` field is a full regular expression (e.g.
-`^ebook.*\.mrc`). automate-marc-import's filename patterns are **substring**
-matches, not regex, so translate accordingly:
+Both plugins match filename patterns as Perl-compatible regular expressions,
+but they don't see the same amount of the filename, so a direct copy of
+getandloadmarc's `fptn` is not always safe:
 
-- `^ebook.*\.mrc` → pattern `ebook`
+- getandloadmarc's `fptn` (e.g. `^ebook.*\.mrc`) is matched against the
+  **full filename** as listed on the server, extension included.
+- automate-marc-import only ever matches against the part of the filename
+  **before its first dot** — the extension, and anything after any later
+  dot, is stripped before matching happens. A pattern that expects to see a
+  dot (like the `\.mrc` in the example above) will never match.
+
+To translate: drop anything in the old pattern that relies on the extension,
+keeping the rest:
+
+- `^ebook.*\.mrc` → pattern `^ebook`
 - Leave the pattern blank if the single vendor should be the default/fallback
   setting for that transport + directory combination.
+
+Double-check any translated pattern against a sample of real filenames from
+the vendor before relying on it in production.
 
 ### 4. Recreate the import behaviour as an Import Batch Profile
 

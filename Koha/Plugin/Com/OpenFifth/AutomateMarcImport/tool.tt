@@ -181,13 +181,28 @@
                             <div class="alert alert-info">
                                 <p><strong>Tip:</strong> Leave this field empty to make this profile the default for all files from this server that don't match any other setting.</p>
                             </div>
-                            <label for="filenames">Filename patterns (one per line): </label>
+                            <label for="filenames">Filename patterns (one per line, regular expressions): </label>
                             <textarea name="filenames">[% filenames | html %]</textarea>
                             <div class="hint">
-                                Enter text patterns to match filenames from this server. For example, entering "dispatch" will match files like "dispatch1234.mrc" or "dispatch_weekly.mrc".
+                                Each line is a Perl-compatible regular expression, matched case-insensitively. A plain word like <code>dispatch</code> still works as before and matches anywhere in the filename &mdash; e.g. "dispatch1234.mrc" or "weekly_dispatch.mrc".
                             </div>
                             <div class="hint">
-                                Matching is case-insensitive. You don't need to include file extensions.
+                                Only the part of the filename <em>before its first dot</em> is compared &mdash; the file extension, and anything after any later dots, is not visible to these patterns. A pattern that expects to see a dot (e.g. to anchor against an extension) will not match.
+                            </div>
+                            <div class="hint">
+                                Characters such as <code>. * + ? ^ $ ( ) [ ] { } |</code> and <code>\</code> have special regex meaning. To match one of these literally, escape it with a backslash, e.g. <code>report\[2024\]</code> matches "report[2024]" but plain <code>report[2024]</code> would be interpreted as a character class instead.
+                            </div>
+                            <div class="hint">
+                                Examples:
+                                <ul>
+                                    <li><code>^dispatch</code> &mdash; only matches filenames that <em>start</em> with "dispatch"</li>
+                                    <li><code>_final$</code> &mdash; only matches filenames ending in "_final" (right before the extension)</li>
+                                    <li><code>daily|weekly</code> &mdash; matches filenames containing either "daily" or "weekly"</li>
+                                    <li><code>report_\d{4}</code> &mdash; matches "report_" followed by exactly four digits</li>
+                                </ul>
+                            </div>
+                            <div class="hint">
+                                See the <a href="https://perldoc.perl.org/perlre" target="_blank" rel="noopener noreferrer">perlre documentation</a> for the full regular expression syntax.
                             </div>
                         </fieldset>
                         <fieldset class="rows">
