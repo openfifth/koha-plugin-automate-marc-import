@@ -246,6 +246,33 @@
                                 </ol>
                             </fieldset>
                         </fieldset>
+                        <fieldset class="rows">
+                            <legend>Remote file cleanup</legend>
+                            <div class="alert alert-info">
+                                <p><strong>What is this?</strong> Optionally tell the remote server this file has been processed, once it has been <em>successfully</em> imported. A failed import always leaves the remote file untouched so it will be retried automatically.</p>
+                            </div>
+                            <ol>
+                                <li>
+                                    <label for="post_process_action">After a successful import: </label>
+                                    <select name="post_process_action" id="post_process_action">
+                                        <option value="none"[% IF post_process_action == 'none' || !post_process_action %] selected="selected"[% END %]>Leave file in place (default)</option>
+                                        <option value="delete"[% IF post_process_action == 'delete' %] selected="selected"[% END %]>Delete file</option>
+                                        <option value="rename"[% IF post_process_action == 'rename' %] selected="selected"[% END %]>Rename file</option>
+                                        <option value="move"[% IF post_process_action == 'move' %] selected="selected"[% END %]>Move file</option>
+                                    </select>
+                                </li>
+                                <li id="post_process_rename_options"[% UNLESS post_process_action == 'rename' %] style="display:none"[% END %]>
+                                    <label for="post_process_rename_suffix">Suffix to append: </label>
+                                    <input type="text" name="post_process_rename_suffix" id="post_process_rename_suffix" size="20" maxlength="50" value="[% post_process_rename_suffix | html %]" placeholder=".done" />
+                                    <div class="hint">Appended directly to the filename, e.g. "SB-WM-123.mrc" becomes "SB-WM-123.mrc.done". Cannot contain "/" or "\".</div>
+                                </li>
+                                <li id="post_process_move_options"[% UNLESS post_process_action == 'move' %] style="display:none"[% END %]>
+                                    <label for="post_process_move_directory"[% IF post_process_action == 'move' %] class="required"[% END %]>Archive directory: </label>
+                                    <input type="text" name="post_process_move_directory" id="post_process_move_directory" size="50" maxlength="500" value="[% post_process_move_directory | html %]" placeholder="Archive" />
+                                    <div class="hint">A directory on the remote server, relative to this setting's download directory. <strong>It must already exist</strong> &mdash; Koha cannot create directories on the remote server.</div>
+                                </li>
+                            </ol>
+                        </fieldset>
                          <fieldset class="action">
                              <input type="hidden" name="op" value="cud-save" />
                              [% IF op == 'edit_form' %]
@@ -461,6 +488,7 @@
                                             <th>Filename patterns</th>
                                             <th>Profile</th>
                                             <th>Auto-commit</th>
+                                            <th>Remote cleanup</th>
                                             <th>Comments</th>
                                             <th>Record type</th>
                                             <th>Encoding</th>
@@ -484,6 +512,13 @@
                                                 <td id="filenames_[% setting.id %]">[% IF setting.filenames %][% setting.filenames | html | html_line_break %][% ELSE %]<em>(default)</em>[% END %]</td>
                                                 <td id="profile_name_[% setting.id %]">[% setting.profile_name %]</td>
                                                 <td id="auto_commit_[% setting.id %]">[% IF setting.auto_commit %]Yes[% ELSE %]No[% END %]</td>
+                                                <td id="post_process_action_[% setting.id %]">
+                                                    [% IF setting.post_process_action == 'delete' %]Delete
+                                                    [% ELSIF setting.post_process_action == 'rename' %]Rename ([% setting.post_process_rename_suffix || '.done' %])
+                                                    [% ELSIF setting.post_process_action == 'move' %]Move ([% setting.post_process_move_directory | html %])
+                                                    [% ELSE %]&mdash;
+                                                    [% END %]
+                                                </td>
                                                 <td id="profile_comment_[% setting.id %]">[% setting.profile_comment %]</td>
                                                 <td id="profile_record_type_[% setting.id %]">[% setting.profile_record_type %]</td>
                                                 <td id="profile_character_encoding_[% setting.id %]">[% setting.profile_character_encoding %]</td>
@@ -614,6 +649,13 @@
                     } else {
                         $('#framework_options').hide();
                     }
+                });
+
+                // Toggle rename/move option fields based on the selected post-processing action
+                $('#post_process_action').on('change', function() {
+                    const action = $(this).val();
+                    $('#post_process_rename_options').toggle(action === 'rename');
+                    $('#post_process_move_options').toggle(action === 'move');
                 });
 
                 // New import profile modal

@@ -38,7 +38,7 @@ our $metadata = {
     minimum_version => '25.11.00.000',
     maximum_version => undef,
     version         => $VERSION,
-    description     => 'A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites. Features include MD5-based file deduplication, automatic archiving of processed files, MARC modification template support, and optional auto-commit for automated importing.',
+    description     => 'A Koha plugin to automate the import and staging of MARC files by enabling nightly retrieval via SFTP from vendor sites. Features include MD5-based file deduplication, automatic archiving of processed files, optional remote file cleanup (delete/rename/move) after successful import, MARC modification template support, and optional auto-commit for automated importing.',
 };
 
 # IMPLEMENTED PLUGIN HOOKS
@@ -94,6 +94,9 @@ sub tool {
                 framework => $cgi->param('framework'),
                 overlay_framework => $cgi->param('overlay_framework'),
                 download_directory => $cgi->param('download_directory'),
+                post_process_action => $cgi->param('post_process_action'),
+                post_process_rename_suffix => $cgi->param('post_process_rename_suffix'),
+                post_process_move_directory => $cgi->param('post_process_move_directory'),
                 available_profiles => Koha::ImportBatchProfiles->search(),
                 available_transport => Koha::File::Transports->search(),
                 available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
@@ -133,6 +136,9 @@ sub tool {
             framework => $setting_data->{framework},
             overlay_framework => $setting_data->{overlay_framework},
             download_directory => $setting_data->{download_directory},
+            post_process_action => $setting_data->{post_process_action},
+            post_process_rename_suffix => $setting_data->{post_process_rename_suffix},
+            post_process_move_directory => $setting_data->{post_process_move_directory},
             available_profiles => Koha::ImportBatchProfiles->search(),
             available_transport => Koha::File::Transports->search(),
             available_frameworks => Koha::BiblioFrameworks->search({}, { order_by => ['frameworktext'] }),
@@ -347,6 +353,7 @@ sub cronjob_nightly {
                 error_message => undef,
             );
             $self->_archive_file($localFile->full_path(), $filename, $setting_id, 'success');
+            $self->_remote_post_process($transport, $filename, $setting_data, $transport_name);
         }
     }
 }
@@ -693,6 +700,45 @@ sub _transport_error {
     return $payload->{error} // $last_error->message;
 }
 
+# Optionally deletes, renames, or moves a file on the remote server once it
+# has been successfully imported (never called on the failure path, so a
+# failed import always leaves the remote file untouched for the existing
+# content-hash retry logic to pick up next run). Cleanup failures (e.g.
+# permission denied, a Move target directory that doesn't exist on the
+# remote server) are logged as warnings only — the import itself already
+# succeeded and is already recorded as such in the log table.
+sub _remote_post_process {
+    my ( $self, $transport, $filename, $setting_data, $transport_name ) = @_;
+
+    my $action = $setting_data->{post_process_action} // 'none';
+    return if $action eq 'none';
+
+    my ( $ok, $new_name );
+    if ( $action eq 'delete' ) {
+        $ok = $self->_call_transport( $transport, 'delete_file', $filename );
+    } elsif ( $action eq 'rename' ) {
+        $new_name = $filename . ( $setting_data->{post_process_rename_suffix} // '.done' );
+        $ok = $self->_call_transport( $transport, 'rename_file', $filename, $new_name );
+    } elsif ( $action eq 'move' ) {
+        my $dir = $setting_data->{post_process_move_directory} // '';
+        return if $dir eq '';
+        $new_name = "$dir/$filename";
+        $ok = $self->_call_transport( $transport, 'rename_file', $filename, $new_name );
+    }
+
+    if ($ok) {
+        $self->{logger}->info(
+            "Remote post-processing ($action) succeeded for '$filename' on transport '$transport_name'"
+                . ( $new_name ? " -> '$new_name'" : '' )
+        );
+    } else {
+        $self->{logger}->warn(
+            "Remote post-processing ($action) failed for '$filename' on transport '$transport_name': "
+                . $self->_transport_error($transport)
+        );
+    }
+}
+
 sub _parse_longname {
     my ( $self, $filehash ) = @_;
 
@@ -833,6 +879,9 @@ sub _get_settings_for_display {
             profile_item_action => $profile->get_column('item_action'),
             filenames => $setting_data->{filenames},
             auto_commit => $setting_data->{auto_commit} // 0,
+            post_process_action => $setting_data->{post_process_action} // 'none',
+            post_process_rename_suffix => $setting_data->{post_process_rename_suffix} // '',
+            post_process_move_directory => $setting_data->{post_process_move_directory} // '',
         );
         push @automate_marc_import_plugin_settings, \%setting;
     }
@@ -878,6 +927,9 @@ sub _validate_cgi_params {
     my $framework = $cgi->param('framework') // '';
     my $overlay_framework = $cgi->param('overlay_framework') // '';
     my $download_directory = $cgi->param('download_directory') // '';
+    my $post_process_action = $cgi->param('post_process_action') // 'none';
+    my $post_process_rename_suffix = $cgi->param('post_process_rename_suffix') // '';
+    my $post_process_move_directory = $cgi->param('post_process_move_directory') // '';
 
     # Validate name (required, max 100 chars)
     $name =~ s/^\s+|\s+$//g;  # trim whitespace
@@ -950,6 +1002,29 @@ sub _validate_cgi_params {
         return { valid => 0, error => "Invalid overlay framework code" };
     }
 
+    # Validate remote post-processing action; default to 'none' for any
+    # unrecognized value rather than erroring, consistent with how a stray
+    # auto_commit value degrades.
+    unless ( grep { $post_process_action eq $_ } qw(none delete rename move) ) {
+        $post_process_action = 'none';
+    }
+
+    # Sanitize rename suffix (appended directly to a filename, not a path,
+    # so '/' and '\' are rejected outright rather than silently stripped).
+    my $sanitized_rename_suffix = $self->_sanitize_rename_suffix($post_process_rename_suffix);
+    if ( $sanitized_rename_suffix =~ m{[/\\]} ) {
+        return { valid => 0, error => "Rename suffix cannot contain '/' or '\\'" };
+    }
+    if ( $post_process_action eq 'rename' && $sanitized_rename_suffix eq '' ) {
+        $sanitized_rename_suffix = '.done';
+    }
+
+    # Sanitize move/archive directory (light-touch: it's a real remote path)
+    my $sanitized_move_directory = $self->_sanitize_download_directory($post_process_move_directory);
+    if ( $post_process_action eq 'move' && $sanitized_move_directory eq '' ) {
+        return { valid => 0, error => "Archive directory is required for the Move action" };
+    }
+
     return {
         valid => 1,
         data => {
@@ -962,6 +1037,9 @@ sub _validate_cgi_params {
             framework => $framework,
             overlay_framework => $overlay_framework,
             download_directory => $sanitized_download_directory,
+            post_process_action => $post_process_action,
+            post_process_rename_suffix => $sanitized_rename_suffix,
+            post_process_move_directory => $sanitized_move_directory,
         }
     };
 }
@@ -1035,6 +1113,25 @@ sub _sanitize_download_directory {
     return $directory;
 }
 
+sub _sanitize_rename_suffix {
+    my ( $self, $suffix ) = @_;
+
+    return '' unless defined $suffix;
+
+    # Same light touch as _sanitize_download_directory. Slash rejection
+    # happens in the caller as a validation error rather than a silent
+    # strip here, since a mangled suffix would produce a confusing remote
+    # filename.
+    $suffix =~ s/[\0\x00-\x1f\x7f-\x9f]//g;
+    $suffix =~ s/^\s+|\s+$//g;
+
+    if ( length($suffix) > 50 ) {
+        $suffix = substr( $suffix, 0, 50 );
+    }
+
+    return $suffix;
+}
+
 sub _save_setting {
     my ( $self, $cgi ) = @_;
 
@@ -1077,6 +1174,9 @@ sub _save_setting {
         framework => $validation_result->{data}->{framework},
         overlay_framework => $validation_result->{data}->{overlay_framework},
         download_directory => $validation_result->{data}->{download_directory},
+        post_process_action => $validation_result->{data}->{post_process_action},
+        post_process_rename_suffix => $validation_result->{data}->{post_process_rename_suffix},
+        post_process_move_directory => $validation_result->{data}->{post_process_move_directory},
     );
 
     eval {

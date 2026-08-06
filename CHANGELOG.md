@@ -12,6 +12,9 @@ along with the comparison links — do not edit the heading or the links by hand
 
 ## [Unreleased]
 
+### Added
+- Optional remote file cleanup after a successful import: per-setting choice to delete, rename (with a configurable suffix, e.g. `.done`), or move the file on the remote server. A failed import always leaves the remote file untouched, so existing retry behaviour is unaffected. (#2)
+
 ## [1.5.0] - 2026-07-22
 
 ## [1.4.0] - 2026-07-22
