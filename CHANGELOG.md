@@ -12,6 +12,8 @@ along with the comparison links — do not edit the heading or the links by hand
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-06
+
 ### Added
 - Optional remote file cleanup after a successful import: per-setting choice to delete, rename (with a configurable suffix, e.g. `.done`), or move the file on the remote server. A failed import always leaves the remote file untouched, so existing retry behaviour is unaffected. (#2)
 
@@ -252,7 +254,8 @@ _No user-visible change — added a `yarn.lock` for CI reliability._
 - Comprehensive error logging and debugging support
 - Atomic database transactions ensuring data integrity
 
-[Unreleased]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/openfifth/koha-plugin-automate-marc-import/compare/v1.2.1...v1.3.0
